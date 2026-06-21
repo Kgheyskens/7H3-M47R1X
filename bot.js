@@ -224,6 +224,76 @@ async function runSetup(guild) {
 }
 
 // ────────────────────────────────────────────────────────────────
+// 🧹  TEARDOWN — deletes every channel/category/role this bot creates
+//     Recognizes BOTH the old Dutch and the new English names, so it
+//     also cleans up duplicates left over from the language switch.
+//     Use it to wipe the server, then run /setup again for a clean build.
+// ────────────────────────────────────────────────────────────────
+async function runTeardown(guild) {
+  let channelsDeleted = 0;
+  let rolesDeleted = 0;
+
+  // Top-level category names the bot uses (English + old Dutch).
+  const categoryPrefixes = [
+    '🎮 ESCAPE ROOM', '⚙️ ADMIN',
+    '🏆',                       // "🏆 STORY — COMPLETED" / "🏆 ... — VOLTOOID"
+  ];
+  // Per-story level categories start with the story emoji + name; we match
+  // them by the " — L" / "— L" marker plus the completed/winner categories.
+  function isBotCategory(name) {
+    if (categoryPrefixes.some(p => name.startsWith(p))) return true;
+    if (/ — L\d+$/.test(name)) return true;       // "📻 STORY — L3"
+    if (name.includes('VOLTOOID') || name.includes('COMPLETED')) return true;
+    return false;
+  }
+
+  // Channel name patterns the bot creates.
+  function isBotChannel(name) {
+    return (
+      name === CONFIG.HUB_NAME ||
+      name === 'escape-room-hub' ||
+      name === CONFIG.LOG_NAME ||
+      name === 'escape-log' ||
+      /^answer-/.test(name) ||
+      /^antwoord-/.test(name) ||              // old Dutch answer channels
+      /-winners$/.test(name) ||
+      /-winnaars$/.test(name) ||              // old Dutch
+      /-hall-of-fame$/.test(name)
+    );
+  }
+
+  // 1. Delete categories (and everything inside them).
+  for (const [, ch] of guild.channels.cache) {
+    if (ch.type === ChannelType.GuildCategory && isBotCategory(ch.name)) {
+      // Delete children first, then the category itself.
+      for (const [, child] of guild.channels.cache.filter(c => c.parentId === ch.id)) {
+        await child.delete('Escape Room teardown').then(() => channelsDeleted++).catch(() => {});
+      }
+      await ch.delete('Escape Room teardown').then(() => channelsDeleted++).catch(() => {});
+    }
+  }
+
+  // 2. Delete any stray bot channels not inside a bot category.
+  for (const [, ch] of guild.channels.cache) {
+    if (ch.type !== ChannelType.GuildCategory && isBotChannel(ch.name)) {
+      await ch.delete('Escape Room teardown').then(() => channelsDeleted++).catch(() => {});
+    }
+  }
+
+  // 3. Delete the bot's roles (level roles + winner roles, English + Dutch).
+  for (const [, role] of guild.roles.cache) {
+    const n = role.name;
+    const isLevelRole   = /-L\d+$/.test(n);
+    const isWinnerRole  = /-completed$/.test(n) || /-voltooid$/.test(n);
+    if (isLevelRole || isWinnerRole) {
+      await role.delete('Escape Room teardown').then(() => rolesDeleted++).catch(() => {});
+    }
+  }
+
+  return { channelsDeleted, rolesDeleted };
+}
+
+// ────────────────────────────────────────────────────────────────
 // 📋  SLASH COMMANDS
 // ────────────────────────────────────────────────────────────────
 function buildCommands() {
@@ -266,6 +336,14 @@ function buildCommands() {
     new SlashCommandBuilder()
       .setName('setup')
       .setDescription('🔧 [ADMIN] Create all roles and channels'),
+
+    new SlashCommandBuilder()
+      .setName('teardown')
+      .setDescription('🔧 [ADMIN] Delete ALL escape-room channels & roles (then run /setup again)')
+      .addStringOption(o => o
+        .setName('confirm')
+        .setDescription('Type "yes" to confirm — this deletes channels and roles')
+        .setRequired(true)),
 
     new SlashCommandBuilder()
       .setName('reset')
@@ -513,6 +591,22 @@ async function handleCommand(interaction) {
     await interaction.deferReply({ ephemeral: true });
     const messages = await runSetup(guild);
     return interaction.editReply({ content: messages.join('\n') + '\n\n🎉 **Setup complete!**' });
+  }
+
+  // ── /teardown ────────────────────────────────────────────────
+  if (commandName === 'teardown') {
+    if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return interaction.reply({ content: '❌ Admins only.', ephemeral: true });
+    }
+    const confirm = interaction.options.getString('confirm').toLowerCase().trim();
+    if (confirm !== 'yes') {
+      return interaction.reply({ content: '❌ Cancelled. Type `confirm: yes` to actually delete everything.', ephemeral: true });
+    }
+    await interaction.deferReply({ ephemeral: true });
+    const { channelsDeleted, rolesDeleted } = await runTeardown(guild);
+    return interaction.editReply({
+      content: `🧹 **Teardown complete.**\nDeleted **${channelsDeleted}** channels/categories and **${rolesDeleted}** roles.\n\nRun \`/setup\` for a clean rebuild.`,
+    });
   }
 
   // ── /reset ───────────────────────────────────────────────────

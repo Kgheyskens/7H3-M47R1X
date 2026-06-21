@@ -109,6 +109,7 @@ You should see: `Escape Room Bot is alive ✅`.
 | Command | What it does |
 |---|---|
 | `/setup` | Build every role + channel for every story. Safe to run again; it skips what already exists. |
+| `/teardown` | Delete ALL escape-room channels and roles (requires `confirm: yes`). Use it to wipe duplicates, then run `/setup` for a clean rebuild. |
 | `/reset` | Reset a player (one story or all). |
 | `/newstory` | Announce a new story to everyone who already finished one. |
 | `/serverprogress` | See how many players are on each level. |
