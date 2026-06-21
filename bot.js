@@ -168,7 +168,7 @@ async function runSetup(guild) {
         'Welcome. Several stories are waiting for you.\n\n' +
         'Use `/startstory` to begin. You can play multiple stories at once.\n\n' +
         stories
-          .map(s => `${s.emoji} **${s.name}** — ${s.levels.length} levels\n*${s.description.substring(0, 80)}...*`)
+          .map(s => `${s.emoji} **${s.name}** — ${s.levels.length} levels\n*${s.description}*`)
           .join('\n\n'))
       .setFooter({ text: '/startstory · /answer · /hint · /myprogress' });
     await hub.send({ embeds: [embed] });
