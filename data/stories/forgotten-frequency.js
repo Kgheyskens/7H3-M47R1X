@@ -224,7 +224,9 @@ WHOO WKHP WR KXVK
 
 Below it: *"Shift = the number of people who vanished in September 1987."*
 
-You already found that number earlier.`,
+You already found that number earlier.
+
+⚠️ *The console is small. It accepts only the **last word** of the decoded message — nothing else.*`,
         },
         {
           name: 'caesar-explained',
@@ -247,7 +249,7 @@ Example: W shifted back 3 = T. H-3 = E. O-3 = L. Z-3 = W.`,
       hints: [
         '💡 The shift = the number of people who vanished = 3. Shift every letter back 3.',
         '💡 W→T, H→E, O→L, O→L … the first word is TELL.',
-        '💡 The full line is "TELL THEM TO HUSH". The answer is the last word.',
+        '💡 The full line is "TELL THEM TO HUSH". Submit ONLY the last word: HUSH.',
       ],
       successMessage: `🔓 **HUSH.**
 
@@ -258,61 +260,57 @@ You look up from the screen — your reflection moves a fraction too late.
 
     {
       id: 6,
-      name: 'The Facility',
+      name: 'The Locked Wing',
       difficulty: 4,
       channels: [
         {
           name: 'floor-plan',
-          description: '🗺️ A floor plan of the facility.',
-          content: `**FLOOR PLAN — STATION RED-7**
+          description: '🗺️ A floor plan of the facility — five sealed rooms.',
+          content: `**FLOOR PLAN — STATION RED-7, LOWER WING**
+
+Five rooms run in a straight line, numbered **1 to 5** left to right:
 
 \`\`\`
-      NORTH (storage)
-           |
-WEST --- CORE --- EAST (bedroom)
-           |
-      SOUTH (corridor)
+[ 1 ] — [ 2 ] — [ 3 ] — [ 4 ] — [ 5 ]
 \`\`\`
 
-The access code for the CORE is the sum of:
-- Active refrigerators in NORTH
-- Intact vials in WEST
-- The number written on the mattress in EAST`,
+A captive is held behind exactly **one** locked door. The CORE will open the right room — but only if you tell it the room **number**.
+
+The clues are scrawled across the other notes in this wing. Cross them off until one room is left.`,
         },
         {
-          name: 'storage-north',
-          description: '❄️ The storage room. It smells of cold air.',
-          content: `**STORAGE ROOM NORTH**
+          name: 'guards-notes',
+          description: "🩸 A guard's torn rounds-sheet.",
+          content: `**ROUNDS — STATION RED-7 — DEDUCTION**
 
-There are 5 refrigerators. Refrigerators 3 and 5 are decommissioned — their plugs have been pulled out.
+What the night guard scribbled, in order:
 
-Refrigerators 1, 2 and 4 are active. On refrigerator 4 there is a sticker: *"Do not touch — specimen 7B"*
+1. *"The cell is **not** at either end of the row."* (so not room 1, not room 5)
+2. *"It is **not** directly next to the boiler in room 2."* (so not room 1, not room 3)
+3. *"Her number is **even**."*
+4. *"I always reach it **before** room 5 on my round, and **after** room 2."*
 
-Decommissioned refrigerators do **not** count.`,
+Only one room survives all four statements.`,
         },
         {
-          name: 'bedroom-east',
-          description: '🛏️ The bedroom. It smells of dust.',
-          content: `**BEDROOM EAST**
+          name: 'marta-margin-note',
+          description: "📓 A note in Marta's hand, taped under the desk.",
+          content: `**MARGIN NOTE — M.L.**
 
-Three bunk beds. Five mattresses are blank. On the sixth mattress — the top bunk of the middle bed — written in marker:
+*"They moved me three times. The guards talk too much.*
 
-**47**
+*Eliminate, don't guess. When four facts point at one door, that door is the truth.*
 
-Below it: *"If you see this: the number is correct. — P.C."*
-
-P.C. — Peter Callens.
-
-*In the laboratory (WEST) there are 5 vials. 2 are broken.*`,
+*Tell the CORE the room number. Nothing else."*`,
         },
       ],
-      answers: ['53', 'fifty three', 'fifty-three'],
+      answers: ['4', 'four', 'room 4'],
       hints: [
-        '💡 Count the active refrigerators in NORTH (not the decommissioned ones).',
-        '💡 In WEST there are 5 vials, 2 broken. How many intact? And the mattress number is in EAST.',
-        '💡 Active refrigerators (3) + intact vials (3) + mattress number (47) = the code.',
+        '💡 Write out rooms 1-5 and cross off as each clue forbids one.',
+        '💡 Clue 1 removes 1 & 5. Clue 2 removes 3. That leaves 2 and 4. Clue 3 says even — both are even, so use clue 4.',
+        '💡 Clue 4: after room 2 and before room 5 → must be 3 or 4; combined with the others only **4** survives.',
       ],
-      successMessage: `🔓 **53. The CORE opens.**
+      successMessage: `🔓 **Room 4. The lock releases.**
 
 Inside: a massive machine. In the centre: a chair. Strapped to the chair — a person.
 
@@ -329,38 +327,45 @@ She is still breathing.`,
           description: '🩸 A crumpled report with bloodstains on the corners.',
           content: `**INCIDENT REPORT — STATION RED-7 — 12/09/1987**
 
-Three technicians report hearing a voice in the bedroom at night. The voice always said the same thing:
+The captive whispers a sequence, over and over. Each night she adds one more number to it:
 
-*"Seven. Six. Eight. Nine. Stop. Stop. Stop."*
+\`\`\`
+1
+11
+21
+1211
+111221
+?
+\`\`\`
 
-Technician Callens wrote the numbers down as a mathematical row. He claims the row is never random.
+*"The next number unlocks the machine,"* she says. *"It is not maths. It is not addition. You must say what you see."*
 
-*"The sum of the numbers she names is the name of who holds her captive."*
-
-But it is not a sum. It is a **product**.`,
+Technician Callens wrote underneath: *"It's not arithmetic at all. Read each line out loud and describe it."*`,
         },
         {
           name: 'callens-proof',
-          description: "📐 Peter Callens' mathematical notes.",
+          description: "📐 Peter Callens' decoding notes.",
           content: `**NOTES — PETER CALLENS**
 
-The voice says: 7, 6, 8, 9
+I cracked it. You **describe the line above**, digit-group by digit-group:
 
-I tried every operation. Multiplying gives the keeper's number.
+- \`1\` is read as "one 1" → write **11**
+- \`11\` is "two 1s" → write **21**
+- \`21\` is "one 2, one 1" → write **1211**
+- \`1211\` is "one 1, one 2, two 1s" → write **111221**
 
-7 × 6 × 8 × 9 = ?
+So the 6th line describes \`111221\`. Read it aloud: "three 1s, two 2s, one 1."
 
-That number — that is his name. The frequency he broadcasts on.
-*"If you know his name, you can jam him."*`,
+Write what you said as digits. That string of digits is the answer.`,
         },
       ],
-      answers: ['3024', 'three thousand twenty four', 'three thousand and twenty four'],
+      answers: ['312211'],
       hints: [
-        '💡 The voice names four numbers: 7, 6, 8, 9. Multiply them all together.',
-        '💡 7 × 6 = 42. 42 × 8 = 336. 336 × 9 = ?',
-        '💡 7 × 6 × 8 × 9 = 3024.',
+        '💡 This is the "look and say" sequence. You read the previous line aloud and write down what you hear.',
+        '💡 Describe 111221: three 1s, then two 2s, then one 1.',
+        '💡 "three 1s, two 2s, one 1" → 3-1, 2-2, 1-1 → 312211.',
       ],
-      successMessage: `🔓 **3024. The machine trembles.**
+      successMessage: `🔓 **312211. The machine trembles.**
 
 The woman opens her eyes. *"You're almost there. But there are more of them. They're getting impatient."*
 
@@ -369,59 +374,56 @@ She hands you a map covered in symbols.`,
 
     {
       id: 8,
-      name: 'The Book of Symbols',
+      name: 'The Punch-Tape',
       difficulty: 4,
       channels: [
         {
-          name: 'the-map',
-          description: '🗺️ The map covered in strange symbols.',
-          content: `**THE MAP**
+          name: 'the-tape',
+          description: '🎞️ A roll of punch-tape spilling out of the machine.',
+          content: `**PUNCH-TAPE — BRIDGE ACTIVATION**
 
-A 3×3 grid of symbols:
+The machine spat out a strip of tape. A hole = **1**, no hole = **0**. Read across, eight positions, one byte:
 
 \`\`\`
-  △  |  ○  |  □
------|-----|-----
-  △  |  □  |  △
------|-----|-----
-  ○  |  △  |  ○
+● ○ ● ● ○ ● ● ●
+1 0 1 1 0 1 1 1
 \`\`\`
 
-Values:
-- △ (triangle) = 3
-- ○ (circle) = 1
-- □ (square) = 0
+A label on the reel reads: *"One byte. Convert it to a normal number and feed it back to the bridge."*
 
-Add up all 9 symbols. That sum activates the bridge.`,
+The bridge accepts only the **decimal** value.`,
         },
         {
-          name: 'legend',
-          description: '📜 A faded legend on the back.',
-          content: `**LEGEND — BACK OF THE MAP**
+          name: 'conversion-card',
+          description: '📜 A binary conversion card taped to the reel.',
+          content: `**BINARY → DECIMAL — CONVERSION CARD**
 
-*"The symbols are older than the facility. Older than the radio.*
+Each position is worth a power of two. Add the values where there is a **1**:
 
-*Add everything up. The number that remains is the key to the bridge.*
+\`\`\`
+position:  128  64  32  16   8   4   2   1
+ bit:        1   0   1   1   0   1   1   1
+\`\`\`
 
-*The bridge stands between here and there. Between memory and forgetting."*`,
+Add up only the columns that show a 1. That total is the answer.`,
         },
       ],
-      answers: ['15', 'fifteen'],
+      answers: ['183', 'one hundred eighty three', 'one hundred and eighty three'],
       hints: [
-        '💡 Triangle=3, circle=1, square=0. Add all 9 symbols.',
-        '💡 Row 1: 3+1+0=4. Row 2: 3+0+3=6. Row 3: ?',
-        '💡 Row 3: 1+3+1=5. Total: 4+6+5=15.',
+        '💡 Binary 10110111. Add the place-values where the bit is 1: 128, 32, 16, 4, 2, 1.',
+        '💡 128 + 32 + 16 = 176. Then + 4 + 2 + 1.',
+        '💡 128+32+16+4+2+1 = 183.',
       ],
-      successMessage: `🔓 **15. The bridge activates.**
+      successMessage: `🔓 **183. The bridge activates.**
 
-The symbols glow. The woman smiles for the first time.
+The tape goes slack. The woman smiles for the first time.
 
 *"The bridge is open. But you must choose who you pull through."*`,
     },
 
     {
       id: 9,
-      name: 'The Final Letter',
+      name: 'The Mirror Alphabet',
       difficulty: 5,
       channels: [
         {
@@ -429,35 +431,38 @@ The symbols glow. The woman smiles for the first time.
           description: '🌀 The portal is open. But it is unstable.',
           content: `**THE PORTAL — OBSERVATIONS**
 
-The signal is collapsing into a single letter. To stabilize the portal you must name that letter.
+The signal collapses into a single scorched word burned onto the panel:
 
-On the panel:
-*"The first letter of the Greek alphabet is Alpha — the beginning. Name the LAST letter of the Greek alphabet — the end."*
+\`\`\`
+LNVTZ
+\`\`\`
 
-The machine hums. It wants the name of the ending.`,
+Beneath it: *"The captives spoke backwards through the glass. A is Z, B is Y. Mirror every letter to read the name that stabilizes the bridge."*
+
+Remember Level 5 — your reflection moved a fraction too late. The whole facility runs on mirrors.`,
         },
         {
-          name: 'greek-chart',
-          description: '🔤 A chart of the Greek alphabet on the wall.',
-          content: `**GREEK ALPHABET — FIRST AND LAST**
+          name: 'mirror-key',
+          description: '🪞 An Atbash mirror-cipher key etched into the glass.',
+          content: `**ATBASH (MIRROR) CIPHER — KEY**
+
+Each letter swaps with its mirror across the alphabet — first ↔ last:
 
 \`\`\`
-Alpha  (Α α)  ← the first, the beginning
-Beta   (Β β)
-Gamma  (Γ γ)
-...
-Psi    (Ψ ψ)
-Omega  (Ω ω)  ← the last, the end
+A B C D E F G H I J K L M
+Z Y X W V U T S R Q P O N
 \`\`\`
 
-*"Alpha and Omega. The beginning and the end. Name the end and the bridge holds."*`,
+So A↔Z, B↔Y, L↔O, N↔M, V↔E, T↔G, Z↔A.
+
+Mirror each letter of \`LNVTZ\` to read the word. It is the last letter of the Greek alphabet — the end of all things.`,
         },
       ],
       answers: ['omega', 'the omega', 'ω'],
       hints: [
-        '💡 The puzzle wants the LAST letter of the Greek alphabet.',
-        '💡 Alpha is the first. What is traditionally paired with it as the last?',
-        '💡 "Alpha and Omega." The answer is Omega.',
+        '💡 Atbash mirrors the alphabet: A↔Z, B↔Y, and so on. Use the key.',
+        '💡 L→O, N→M, V→E, T→G, Z→A.',
+        '💡 LNVTZ mirrors to OMEGA — the final Greek letter.',
       ],
       successMessage: `🔓 **OMEGA. The portal stabilizes.**
 
@@ -476,54 +481,26 @@ Marta: *"There is one more layer. The very last."*`,
           description: '🔴 The final room. The system is still running.',
           content: `**THE FINAL ROOM**
 
-In the centre: the central transmitter. On the panel:
+In the centre: the central transmitter. Ernest stands beside it, headphones in hand. On the panel, one last prompt:
 
-*"Enter the master code to shut the system down."*
+*"Enter the MASTER CODE to shut the system down."*
 
-The master code is a word. Take the first letter of every WORD answer you found along the way — skip the number answers.`,
-        },
-        {
-          name: 'master-code-clue',
-          description: '📟 A clue printed on thermal paper.',
-          content: `**MASTER CODE — CLUE**
+Ernest turns to you:
 
-Take the first letter of every WORD answer:
+*"Four of the doors you opened were sealed with a **word**, not a number. Four words. Take the **first letter of each one**, in the order you found them, and you'll have the master code.*
 
-- Level 1: **E**ar → E
-- Level 2: **C**ode → C
-- Level 3: 3149 → *(number, skip)*
-- Level 4: 144 → *(number, skip)*
-- Level 5: **H**ush → H
-- Level 6: 53 → *(number, skip)*
-- Level 7: 3024 → *(number, skip)*
-- Level 8: 15 → *(number, skip)*
-- Level 9: **O**mega → O
+*The numbers along the way were just locks. The words were the message all along.*
 
-Letters in order: **E — C — H — O**`,
-        },
-        {
-          name: 'ernest-last-message',
-          description: '📻 Ernest stands at the radio. He wants to say something.',
-          content: `**ERNEST VERMEER — LAST MESSAGE**
+*Assemble the four letters. It spells what a signal becomes when it has nowhere left to go — it bounces back, it repeats, it refuses to die.*
 
-*"The word... I've known it all along.*
-
-*The letters are E, C, H, O. Put them in order.*
-
-*It's what a signal becomes when it has nowhere left to go. It bounces back. It repeats. It refuses to die.*
-
-*An..."*
-
-Ernest looks you straight in the eye.
-
-*"**ECHO.**"*`,
+*Submit it with \`/answer\` in your answer channel. Stuck on which words? Use \`/hint\`."*`,
         },
       ],
       answers: ['echo', 'an echo', 'the echo'],
       hints: [
-        '💡 Take the first letter of every WORD answer: E (ear), C (code), H (hush), O (omega).',
-        '💡 Put the letters E, C, H, O in order.',
-        '💡 E + C + H + O = ECHO.',
+        '💡 Only four levels had WORD answers (not numbers). Find those four levels and note their answers.',
+        '💡 The word-answers were: Level 1 (a body part), Level 2 (a 4-letter morse word), Level 5 (decoded Caesar), Level 9 (decoded Atbash).',
+        '💡 First letters of Ear, Code, Hush, Omega → E, C, H, O → rearrange in order → ECHO.',
       ],
       successMessage: `🔓 **ECHO.**
 

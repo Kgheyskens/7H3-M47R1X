@@ -1,7 +1,9 @@
 // ================================================================
 // 📖 STORY 2 — THE HOLLOW LIGHTHOUSE
 // Through-line: a lighthouse keeper vanished decades ago. You spend
-// one night in the tower and the light starts sending messages.
+// one night in the tower and the dead light starts sending messages.
+// Meta-finale: the four WORD answers (Reef, Escape, Shore, Tower)
+// give first letters R-E-S-T → "let me REST".
 // ================================================================
 
 module.exports = {
@@ -15,7 +17,7 @@ module.exports = {
     {
       id: 1,
       name: 'The Logbook',
-      difficulty: 1,
+      difficulty: 2,
       channels: [
         {
           name: 'keepers-desk',
@@ -24,76 +26,84 @@ module.exports = {
 
 The last entry is dated 3 November 1984, in a shaking hand:
 
-*"The light won't obey me anymore. It blinks when I sleep. Three short, three long, three short. Over and over. If anyone reads this — that's not a malfunction. That's a cry. Answer it the way sailors do."*
+*"The light won't obey me anymore. It blinks at me in code. I copied the pattern before I lost my nerve. If anyone reads this — that's not a malfunction. That's a word. Decode it the way the navy taught us."*
 
-The rest of the page is torn out.`,
+Pinned beside the log, the flash pattern she copied:
+
+\`\`\`
+.-.  .  .  ..-.
+\`\`\``,
         },
         {
-          name: 'signal-card',
-          description: '📇 A laminated reference card pinned above the desk.',
-          content: `**MARITIME DISTRESS — REFERENCE**
+          name: 'morse-card',
+          description: '📇 A laminated morse card pinned above the desk.',
+          content: `**INTERNATIONAL MORSE — REFERENCE**
 
-Every sailor knows one signal above all others. Three short flashes, three long flashes, three short flashes. It is the universal call for help.
+\`\`\`
+A .-    B -...  C -.-.  D -..   E .
+F ..-.  G --.   H ....  I ..    J .---
+K -.-   L .-..  M --    N -.    O ---
+P .--.  Q --.-  R .-.   S ...   T -
+U ..-   V ...-  W .--   X -..-  Y -.--
+Z --..
+\`\`\`
 
-In letters, the three-three-three pattern spells the most famous distress call in the world.
-
-*(Hint: it is also said to stand for "Save Our Souls.")*`,
+Each group separated by spaces is one letter. Decode the four letters from the log.`,
         },
       ],
-      answers: ['sos', 's.o.s', 's o s', 's-o-s'],
+      answers: ['reef', 'the reef', 'black reef'],
       hints: [
-        '💡 Three short, three long, three short. What maritime signal is that?',
-        '💡 The reference card spells it out — the most famous distress call.',
-        '💡 Three letters. "Save Our Souls." The answer is SOS.',
+        '💡 Use the morse card. Four groups: `.-.` `.` `.` `..-.`',
+        '💡 `.-.`=R, `.`=E, `.`=E, `..-.`=F.',
+        '💡 The word is REEF — the rocks this lighthouse warns ships about.',
       ],
-      successMessage: `🔓 **SOS. The lamp above you flares once.**
+      successMessage: `🔓 **REEF. The lamp above you flares once.**
 
-A drawer you hadn't noticed clicks open at the side of the desk. Inside: a brass key and a tide chart.
+A drawer you hadn't noticed clicks open at the side of the desk. Inside: a brass key and a torn page of verse.
 
 *Someone — or something — wants you to climb.*`,
     },
 
     {
       id: 2,
-      name: 'The Tide Chart',
-      difficulty: 2,
+      name: 'The Torn Poem',
+      difficulty: 3,
       channels: [
         {
-          name: 'tide-chart',
-          description: '🌊 A water-stained chart of the local tides.',
-          content: `**TIDE CHART — BLACK REEF — NOVEMBER**
+          name: 'the-poem',
+          description: '📜 A torn page of verse, water-stained but readable.',
+          content: `**FOUND IN THE DRAWER — A POEM**
 
-The locked stair-gate uses a 3-digit code. The brass plate beside it reads:
-
-*"The tower remembers the night she left. Enter the hour of the highest tide on the night of 3 November 1984 — written as it appears on this chart."*
+The stair-gate has a 6-letter word lock. The verse hides the word — read it the old way keepers passed secrets:
 
 \`\`\`
-2 NOV   High tide: 21:00   Height: 4.1 m
-3 NOV   High tide: 23:00   Height: 5.8 m   ← highest of the month
-4 NOV   High tide: 22:00   Height: 4.4 m
+Empty the tower and empty the shore,
+Salt in the lantern and dark at the door,
+Cold come the breakers, the drowned ones once more,
+All of them calling from under the floor,
+Pray for the keeper who walks here no more,
+Echoes and silence, then nothing at all.
 \`\`\`
 
-The code is the high-tide time on 3 November, digits only.`,
+*"The first of each line will set you free."*`,
         },
         {
-          name: 'brass-plate',
-          description: '🔱 A small brass plate screwed beside the gate.',
-          content: `**STAIR-GATE — INSTRUCTIONS**
+          name: 'margin-hint',
+          description: '✍️ A note scrawled in the margin.',
+          content: `**MARGIN NOTE — A.B.**
 
-The time is shown in 24-hour format on the chart. Strip the colon.
+*"An acrostic. Take the very FIRST letter of every line, top to bottom, and read straight down.*
 
-For example, a high tide listed as 09:00 would be entered as **900**.
-
-Enter only the digits of the 3 November high-tide time.`,
+*Six lines. Six letters. One word. That word opens the gate."*`,
         },
       ],
-      answers: ['2300', '23:00', '23 00'],
+      answers: ['escape', 'to escape'],
       hints: [
-        '💡 Find the highest tide of the month on the chart — it is marked.',
-        '💡 The 3 November high tide is at 23:00.',
-        '💡 Strip the colon: 23:00 becomes 2300.',
+        '💡 Read only the first letter of each line, top to bottom.',
+        '💡 Lines start with: E, S, C, A, P, E.',
+        '💡 Straight down it spells ESCAPE.',
       ],
-      successMessage: `🔓 **2300. The gate swings inward.**
+      successMessage: `🔓 **ESCAPE. The gate swings inward.**
 
 The spiral staircase rises into the dark. Salt wind moans down the shaft.
 
@@ -102,138 +112,142 @@ Halfway up, a framed photograph hangs crooked on the wall. You'll want to look a
 
     {
       id: 3,
-      name: 'The Crooked Photograph',
-      difficulty: 2,
+      name: 'The Mirror Letters',
+      difficulty: 3,
       channels: [
         {
           name: 'the-photograph',
-          description: '🖼️ A faded photo of the lighthouse staff.',
+          description: '🖼️ A faded photo of the lighthouse staff, glass cracked.',
           content: `**PHOTOGRAPH — "STAFF, SUMMER 1984"**
 
-Five people stand on the rocks. On the back, written in pencil:
+Five keepers on the rocks. Scratched into the frame, a single word of nonsense:
 
-*"Left to right: Tomas, Alma, Greta, Ravi, Nils."*
+\`\`\`
+HSLIV
+\`\`\`
 
-*"The one who stayed is the one in the middle. She is the key. Count her letters."*
-
-The glass over Alma's face is cracked.`,
+Below it: *"She wrote everything in mirror-script so the others couldn't read it. A is Z, B is Y. Turn it around. It names the place she kept looking toward."*`,
         },
         {
-          name: 'wall-scratch',
-          description: '🪨 Words scratched into the plaster beside the frame.',
-          content: `**SCRATCHED INTO THE WALL**
+          name: 'mirror-key',
+          description: '🪞 An Atbash key etched into the cracked glass.',
+          content: `**ATBASH (MIRROR) CIPHER — KEY**
 
-*"Not the name. The NUMBER of letters in the name of the one who stayed."*
+Each letter swaps with its mirror across the alphabet:
 
-*"She stood in the middle of five. She never left this tower."*
+\`\`\`
+A B C D E F G H I J K L M
+Z Y X W V U T S R Q P O N
+\`\`\`
 
-Count carefully. The answer is a single number.`,
+So H↔S, S↔H, L↔O, I↔R, V↔E.
+
+Mirror every letter of \`HSLIV\` to read the word.`,
         },
       ],
-      answers: ['4', 'four'],
+      answers: ['shore', 'the shore'],
       hints: [
-        '💡 Who "stayed"? The keeper who vanished — the one in the middle of the five.',
-        '💡 Left to right: Tomas, Alma, Greta, Ravi, Nils. The middle person is Alma.',
-        '💡 Count the letters in ALMA: A-L-M-A = 4.',
+        '💡 Atbash mirrors the alphabet: A↔Z, B↔Y... Use the key on each letter.',
+        '💡 H→S, S→H, L→O, I→R, V→E.',
+        '💡 HSLIV mirrors to SHORE.',
       ],
-      successMessage: `🔓 **4. The photograph swings aside on a hidden hinge.**
+      successMessage: `🔓 **SHORE.**
 
-Behind it: a small alcove holding a wax cylinder recording and a note that simply says *"Play me at the top."*
+The photograph swings aside on a hidden hinge. Behind it: a brass dial and a map of the lamp-room floor.
 
-You keep climbing.`,
+*Keep climbing. The lamp room is next.*`,
     },
 
     {
       id: 4,
-      name: 'The Lamp Room Cipher',
-      difficulty: 3,
+      name: 'The Lamp-Room Floor',
+      difficulty: 4,
       channels: [
         {
-          name: 'lamp-room',
-          description: '💡 The top of the tower. The great lens turns slowly on its own.',
-          content: `**LAMP ROOM — ROTATING LENS**
+          name: 'floor-grid',
+          description: '🔲 The lamp-room floor is a 5×5 grid of brass tiles.',
+          content: `**LAMP-ROOM FLOOR — TILE GRID**
 
-The lens flashes a sequence at you, deliberate and slow. Beside the mechanism, a card reads:
-
-*"I speak in numbers. Each number is a letter. A=1, B=2, and so on to Z=26. Read me and you'll know where she is."*
-
-The flashes, counted carefully:
+Each tile holds a letter. You start on the tile marked ★ (top-left, row 1 column 1). A brass dial gives you a path. Follow it tile by tile and read the letters you LAND on (plus the start).
 
 \`\`\`
-2 - 5 - 12 - 15 - 23
-\`\`\``,
+      C1  C2  C3  C4  C5
+ R1 [★T]  O   W   K   X
+ R2   Z   Q   E   B   L
+ R3   M   Y   R   U   D
+ R4   I   A   S   N   H
+ R5   G   P   V   F   C
+\`\`\`
+
+Start letter: **T** (★). Then apply the moves (R=right, D=down, L=left, U=up):
+\`\`\`
+R, R, D, D
+\`\`\`
+Read the start letter plus each landed letter — five letters total.`,
         },
         {
-          name: 'cipher-key',
-          description: '🔑 An engraved plate explaining the number code.',
-          content: `**A1Z26 CIPHER — KEY**
+          name: 'dial-instructions',
+          description: '🧭 Engraved instructions beside the brass dial.',
+          content: `**BRASS DIAL — HOW TO READ**
 
-Convert each number to its letter:
+Start on ★ (R1C1 = T). Apply each move to step one tile.
+- **R** = column + 1
+- **D** = row + 1
 
-\`\`\`
-1=A   2=B   3=C   4=D   5=E   6=F   7=G
-8=H   9=I  10=J  11=K  12=L  13=M  14=N
-15=O  16=P  17=Q  18=R  19=S  20=T  21=U
-22=V  23=W  24=X  25=Y  26=Z
-\`\`\`
+Worked start: T (R1C1) → **R** → R1C2 (O) → **R** → R1C3 (W) → ...
 
-Decode the five numbers into a five-letter word. It tells you where to look next.`,
+Continue the last two moves (D, D) and read all five letters in order. That word is the answer.`,
         },
       ],
-      answers: ['below', 'down', 'beneath'],
+      answers: ['tower', 'the tower'],
       hints: [
-        '💡 Convert each number to a letter: 2=B, 5=E, 12=L...',
-        '💡 2-5-12-15-23 → B-E-L-O-W.',
-        '💡 The word is BELOW. Whatever you seek is beneath you, not above.',
+        '💡 Track row & column. Right adds 1 to the column; Down adds 1 to the row.',
+        '💡 Path tiles: T(R1C1) → O(R1C2) → W(R1C3) → E(R2C3) → R(R3C3).',
+        '💡 The five letters spell TOWER.',
       ],
-      successMessage: `🔓 **BELOW.**
+      successMessage: `🔓 **TOWER.**
 
-The word lands like a stone in your chest. You came all the way up — and the answer points *down*. Beneath the lighthouse. Beneath the rock.
+The tiles sink flush with the floor. The great lens stops turning. In the sudden stillness you hear it — a voice, faint, coming up through the stone beneath your boots.
 
-The wax cylinder begins to play by itself.`,
+You came all this way up. Now you must go down.`,
     },
 
     {
       id: 5,
       name: 'What the Light Was Saying',
-      difficulty: 4,
+      difficulty: 5,
       channels: [
         {
-          name: 'the-recording',
-          description: '📼 The wax cylinder crackles to life in Alma\'s voice.',
-          content: `**WAX CYLINDER — ALMA BRANDT**
+          name: 'the-sealed-door',
+          description: '🚪 At the foot of the stairs: a stone door, no handle.',
+          content: `**THE STONE DOOR — ALMA'S LAST MESSAGE**
+
+A wax cylinder beside the door crackles to life in a woman's voice:
 
 *"If you climbed all this way, you're braver than I was. The light was never broken. It was me, signalling, the only way I could from down here.*
 
-*The storm took the cliff path. I went below to save the spare oil and the sea sealed the door behind me. Forty years I've flashed the same word up the shaft, hoping someone would read it and dig.*
+*I sealed four doors on your way up, each with a single WORD. Four words, in the order you found them. Take the FIRST LETTER of each one and put them together — that is what I have been begging for, all these years.*
 
-*Three short, three long, three short. Then a single word, over and over. The same word you'd shout into a cave to see if anyone shouts back. The same word that comes back to you off these cliffs every single night.*
+*Set it on the wheels below and let me have it at last."*
 
-*Say it, and let me rest."*`,
-        },
-        {
-          name: 'final-clue',
-          description: '🪨 Words chalked on the floor of the lamp room.',
-          content: `**CHALKED ON THE FLOOR**
+Carved above five worn letter-wheels:
 
-*"A sound that returns to the one who made it.*
-*The cliffs give it back across the water every night.*
-*Shout into the dark and the dark answers with your own voice.*
+*"Four words. Four first letters, in order. The thing the dead are owed."*
 
-*Name it, and the door below opens."*`,
+Assemble the first letters of your four previous WORD answers, in order, and submit the word with \`/answer\`. Stuck? Use \`/hint\`.`,
         },
       ],
-      answers: ['echo', 'an echo', 'the echo'],
+      answers: ['rest', 'to rest', 'let me rest'],
       hints: [
-        '💡 A sound that bounces off the cliffs and returns to you — what is it called?',
-        '💡 You shout into a cave and your own voice comes back. That returning sound...',
-        '💡 The word is ECHO.',
+        '💡 Only the WORD answers count, in order: Level 1, 2, 3, 4.',
+        '💡 Those words were: REEF, ESCAPE, SHORE, TOWER.',
+        '💡 First letters R, E, S, T → REST. That is what Alma has been asking for.',
       ],
-      successMessage: `🔓 **ECHO.**
+      successMessage: `🔓 **REST.**
 
-Far below, stone grinds against stone. A sealed door, shut for forty years, drifts open on the tide.
+The wheels click home. Far below, stone grinds against stone. A sealed door, shut for forty years, drifts open on the tide.
 
-The light in the lamp room steadies — no more flashing, no more SOS. Just a calm, even beam sweeping the water, the way a lighthouse is meant to shine.
+The light in the lamp room steadies — no more flashing, no more code. Just a calm, even beam sweeping the water, the way a lighthouse is meant to shine.
 
 Somewhere beneath your feet, Alma Brandt finally stops calling for help.
 
