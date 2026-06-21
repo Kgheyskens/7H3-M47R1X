@@ -155,7 +155,7 @@ async function runSetup(guild) {
       id: guild.id,
       allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.UseApplicationCommands],
     },
-    ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }] : []),
+    ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages] }] : []),
   ]);
 
   const hub = await mkChannel(CONFIG.HUB_NAME, hubCat, 'Pick a story and start your adventure');
@@ -208,7 +208,7 @@ async function runSetup(guild) {
           id: role.id,
           allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.UseApplicationCommands],
         }] : []),
-        ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }] : []),
+        ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages] }] : []),
       ]);
 
       for (const channel of level.channels) {
@@ -232,7 +232,7 @@ async function runSetup(guild) {
         id: winnerRole.id,
         allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.UseApplicationCommands],
       },
-      ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }] : []),
+      ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages] }] : []),
     ]);
     await mkChannel(`${story.id}-winners`, winCat, `Winners of ${story.name}`);
     await mkChannel(`${story.id}-hall-of-fame`, winCat, `Hall of Fame — ${story.name}`);
@@ -243,7 +243,7 @@ async function runSetup(guild) {
   // 3. Admin log
   const adminCat = await mkCategory('⚙️ ADMIN', [
     { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-    ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }] : []),
+    ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages] }] : []),
   ]);
   await mkChannel(CONFIG.LOG_NAME, adminCat, 'Internal logs');
   messages.push('✅ Admin log created');
@@ -439,18 +439,25 @@ client.on('interactionCreate', async interaction => {
 // typing and simply remove any human message posted in a bot channel —
 // EXCEPT the lounge. Slash-command replies are interactions, not messages,
 // so they are never touched by this.
+// Free chat is allowed ONLY in the lounge and the per-story "COMPLETED"
+// channels (winners + hall-of-fame), so finishers can discuss the levels.
+// Everywhere else in the escape-room channels, players may only run commands —
+// any free-chat message is deleted.
 function isManagedSilentChannel(ch) {
   const name = ch?.name ?? '';
-  if (name === CONFIG.LOUNGE_NAME) return false;          // lounge is free chat
-  if (name === CONFIG.LOG_NAME) return false;             // admin log (hidden anyway)
+  const parentName = ch?.parent?.name ?? '';
+
+  // ── Channels where chatting IS allowed → never delete ──
+  if (name === CONFIG.LOUNGE_NAME) return false;          // lounge
+  if (name === CONFIG.LOG_NAME) return false;             // admin log
+  if (/-winners$/.test(name) || /-hall-of-fame$/.test(name)) return false; // completed
+  if (parentName.includes('COMPLETED')) return false;     // anything under a COMPLETED category
+
+  // ── Channels where ONLY commands are allowed → delete free chat ──
   if (name === CONFIG.HUB_NAME) return true;
   if (/^answer-/.test(name)) return true;
-  if (/-winners$/.test(name) || /-hall-of-fame$/.test(name)) return true;
-  // Any text channel sitting under one of our escape-room categories.
-  const parentName = ch?.parent?.name ?? '';
   if (parentName.startsWith('🎮 ESCAPE ROOM')) return true;
   if (/ — L\d+$/.test(parentName)) return true;
-  if (parentName.includes('COMPLETED')) return true;
   return false;
 }
 
@@ -460,7 +467,9 @@ client.on('messageCreate', async message => {
   // Admins may type anywhere (e.g. to post puzzle content or moderate).
   if (message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) return;
   if (!isManagedSilentChannel(message.channel)) return;
-  await message.delete().catch(() => {});
+  await message.delete().catch(err =>
+    console.error(`⚠️  Could not delete message in #${message.channel?.name}: ${err.message}. ` +
+                  `Does the bot have the "Manage Messages" permission there?`));
 });
 
 // Never let an unhandled rejection kill the process.
