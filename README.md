@@ -105,9 +105,16 @@ You should see: `Escape Room Bot is alive ✅`.
 | `/hint` | Get the next hint for your current level (limited per level). | the `answer-…` channel for your level |
 | `/myprogress` | See every story: completed, in progress, not started. | anywhere you can run commands |
 
-> **Channel rules:** players can *run slash commands* in escape-room channels but
-> cannot type free messages there — except in **#lounge**, the one open chat channel
-> `/setup` creates. The admin commands below are hidden from non-admins entirely.
+> **Channel rules:** Discord requires a user to have *Send Messages* to run any
+> slash command, so escape-room channels allow typing — but the bot instantly
+> deletes any free-chat message players post there, keeping the channels clean.
+> **#lounge** is exempt (free chat allowed). Admins can type anywhere.
+> The admin commands below are hidden from non-admins entirely.
+>
+> Note: Discord does not let a bot hide a *player* command (like `/answer`) from
+> the command list in specific channels — that needs a server admin to set it
+> manually under **Server Settings → Integrations**. The bot instead politely
+> rejects a command used in the wrong channel with an ephemeral message.
 
 ### For admins
 | Command | What it does |

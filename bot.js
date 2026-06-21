@@ -146,13 +146,14 @@ async function runSetup(guild) {
   }
 
   // 1. Public hub category.
-  //    Players may RUN slash commands here but may NOT type free messages:
-  //    deny SendMessages, but explicitly allow UseApplicationCommands.
+  //    NOTE: Discord requires BOTH SendMessages AND UseApplicationCommands for
+  //    a user to run a slash command. So we must ALLOW SendMessages here, and
+  //    instead keep the channel chat-free by auto-deleting any human message
+  //    (see the messageCreate listener further down). The #lounge is exempt.
   const hubCat = await mkCategory('🎮 ESCAPE ROOM', [
     {
       id: guild.id,
-      allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.UseApplicationCommands],
-      deny:  [PermissionsBitField.Flags.SendMessages],
+      allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.UseApplicationCommands],
     },
     ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }] : []),
   ]);
@@ -176,16 +177,12 @@ async function runSetup(guild) {
   messages.push('✅ Hub created');
 
   // Lounge — the ONE public channel where players may freely chat.
-  const lounge = await mkChannel(
+  // It's excluded from the auto-delete listener by name, so messages stay.
+  await mkChannel(
     CONFIG.LOUNGE_NAME,
     hubCat,
     'Hang out and chat with other players',
     '💬 **Welcome to the lounge!**\n\nThis is the one place you can chat freely. Have fun, no spoilers please!');
-  // Override the category's "no typing" rule for this channel only.
-  await lounge.permissionOverwrites.edit(guild.id, {
-    SendMessages: true,
-    UseApplicationCommands: true,
-  }).catch(() => {});
   messages.push('✅ Lounge created');
 
   // 2. Per story: roles + channels
@@ -204,11 +201,12 @@ async function runSetup(guild) {
       const catName = `${storyEmoji} ${story.name.toUpperCase()} — L${level.id}`;
       const cat = await mkCategory(catName, [
         { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-        // Players on this level can SEE the channels and USE commands, but cannot type.
+        // Players on this level can see the channels and use commands. Discord
+        // forces us to also allow SendMessages for commands to work; free chat
+        // is stripped by the auto-delete listener instead.
         ...(role ? [{
           id: role.id,
-          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.UseApplicationCommands],
-          deny:  [PermissionsBitField.Flags.SendMessages],
+          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.UseApplicationCommands],
         }] : []),
         ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }] : []),
       ]);
@@ -228,11 +226,11 @@ async function runSetup(guild) {
     const winCatName = `🏆 ${story.name.toUpperCase()} — COMPLETED`;
     const winCat = await mkCategory(winCatName, [
       { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-      // Winners can see their trophy channels and use commands, but not type here.
+      // Winners can see their trophy channels and use commands. SendMessages is
+      // allowed (required for commands); free chat is stripped by auto-delete.
       {
         id: winnerRole.id,
-        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.UseApplicationCommands],
-        deny:  [PermissionsBitField.Flags.SendMessages],
+        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.UseApplicationCommands],
       },
       ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }] : []),
     ]);
@@ -434,6 +432,35 @@ client.on('interactionCreate', async interaction => {
       else await interaction.reply(msg);
     } catch (_) { /* interaction expired — nothing else we can do */ }
   }
+});
+
+// ── Auto-delete free chat in escape-room channels ───────────────
+// Discord can't allow slash commands while blocking typing, so we allow
+// typing and simply remove any human message posted in a bot channel —
+// EXCEPT the lounge. Slash-command replies are interactions, not messages,
+// so they are never touched by this.
+function isManagedSilentChannel(ch) {
+  const name = ch?.name ?? '';
+  if (name === CONFIG.LOUNGE_NAME) return false;          // lounge is free chat
+  if (name === CONFIG.LOG_NAME) return false;             // admin log (hidden anyway)
+  if (name === CONFIG.HUB_NAME) return true;
+  if (/^answer-/.test(name)) return true;
+  if (/-winners$/.test(name) || /-hall-of-fame$/.test(name)) return true;
+  // Any text channel sitting under one of our escape-room categories.
+  const parentName = ch?.parent?.name ?? '';
+  if (parentName.startsWith('🎮 ESCAPE ROOM')) return true;
+  if (/ — L\d+$/.test(parentName)) return true;
+  if (parentName.includes('COMPLETED')) return true;
+  return false;
+}
+
+client.on('messageCreate', async message => {
+  if (message.author.bot) return;                 // ignore the bot's own messages
+  if (!message.guild) return;                     // ignore DMs
+  // Admins may type anywhere (e.g. to post puzzle content or moderate).
+  if (message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) return;
+  if (!isManagedSilentChannel(message.channel)) return;
+  await message.delete().catch(() => {});
 });
 
 // Never let an unhandled rejection kill the process.
