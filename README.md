@@ -98,17 +98,21 @@ You should see: `Escape Room Bot is alive ✅`.
 ## 🎮 Commands
 
 ### For players
-| Command | What it does |
-|---|---|
-| `/startstory` | Pick a story and begin (unlocks its Level 1 channels). |
-| `/answer` | Submit an answer. If you're in several stories, add the `story` option. |
-| `/hint` | Get the next hint for your current level (limited per level). |
-| `/myprogress` | See every story: completed, in progress, not started. |
+| Command | What it does | Where |
+|---|---|---|
+| `/startstory` | Pick a story and begin (unlocks its Level 1 channels). | `#escape-room-hub` only |
+| `/answer` | Submit an answer. If you're in several stories, add the `story` option. | the `answer-…` channel for your level |
+| `/hint` | Get the next hint for your current level (limited per level). | the `answer-…` channel for your level |
+| `/myprogress` | See every story: completed, in progress, not started. | anywhere you can run commands |
+
+> **Channel rules:** players can *run slash commands* in escape-room channels but
+> cannot type free messages there — except in **#lounge**, the one open chat channel
+> `/setup` creates. The admin commands below are hidden from non-admins entirely.
 
 ### For admins
 | Command | What it does |
 |---|---|
-| `/setup` | Build every role + channel for every story. Safe to run again; it skips what already exists. |
+| `/setup` | Build every role + channel for every story (incl. the public **#lounge**). Safe to run again; it skips what already exists. |
 | `/teardown` | Delete ALL escape-room channels and roles (requires `confirm: yes`). Use it to wipe duplicates, then run `/setup` for a clean rebuild. |
 | `/reset` | Reset a player (one story or all). |
 | `/newstory` | Announce a new story to everyone who already finished one. |

@@ -38,9 +38,10 @@ const CONFIG = {
   BOT_TOKEN: process.env.BOT_TOKEN,
   CLIENT_ID: process.env.CLIENT_ID,
   GUILD_ID:  process.env.GUILD_ID,
-  LOG_NAME:  'escape-log',
-  HUB_NAME:  'escape-room-hub', // public channel where players pick a story
-  PORT:      process.env.PORT || 3000,
+  LOG_NAME:   'escape-log',
+  HUB_NAME:   'escape-room-hub', // public channel where players pick a story
+  LOUNGE_NAME:'lounge',          // public free-chat channel (players may type here)
+  PORT:       process.env.PORT || 3000,
 };
 
 // ────────────────────────────────────────────────────────────────
@@ -144,9 +145,15 @@ async function runSetup(guild) {
     return ch;
   }
 
-  // 1. Public hub category
+  // 1. Public hub category.
+  //    Players may RUN slash commands here but may NOT type free messages:
+  //    deny SendMessages, but explicitly allow UseApplicationCommands.
   const hubCat = await mkCategory('🎮 ESCAPE ROOM', [
-    { id: guild.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory], deny: [PermissionsBitField.Flags.SendMessages] },
+    {
+      id: guild.id,
+      allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.UseApplicationCommands],
+      deny:  [PermissionsBitField.Flags.SendMessages],
+    },
     ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }] : []),
   ]);
 
@@ -168,6 +175,19 @@ async function runSetup(guild) {
   }
   messages.push('✅ Hub created');
 
+  // Lounge — the ONE public channel where players may freely chat.
+  const lounge = await mkChannel(
+    CONFIG.LOUNGE_NAME,
+    hubCat,
+    'Hang out and chat with other players',
+    '💬 **Welcome to the lounge!**\n\nThis is the one place you can chat freely. Have fun, no spoilers please!');
+  // Override the category's "no typing" rule for this channel only.
+  await lounge.permissionOverwrites.edit(guild.id, {
+    SendMessages: true,
+    UseApplicationCommands: true,
+  }).catch(() => {});
+  messages.push('✅ Lounge created');
+
   // 2. Per story: roles + channels
   for (const story of allStories()) {
     const storyEmoji = story.emoji ?? '📖';
@@ -184,7 +204,12 @@ async function runSetup(guild) {
       const catName = `${storyEmoji} ${story.name.toUpperCase()} — L${level.id}`;
       const cat = await mkCategory(catName, [
         { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-        ...(role ? [{ id: role.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }] : []),
+        // Players on this level can SEE the channels and USE commands, but cannot type.
+        ...(role ? [{
+          id: role.id,
+          allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.UseApplicationCommands],
+          deny:  [PermissionsBitField.Flags.SendMessages],
+        }] : []),
         ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }] : []),
       ]);
 
@@ -203,7 +228,12 @@ async function runSetup(guild) {
     const winCatName = `🏆 ${story.name.toUpperCase()} — COMPLETED`;
     const winCat = await mkCategory(winCatName, [
       { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-      { id: winnerRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
+      // Winners can see their trophy channels and use commands, but not type here.
+      {
+        id: winnerRole.id,
+        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.UseApplicationCommands],
+        deny:  [PermissionsBitField.Flags.SendMessages],
+      },
       ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }] : []),
     ]);
     await mkChannel(`${story.id}-winners`, winCat, `Winners of ${story.name}`);
@@ -252,6 +282,8 @@ async function runTeardown(guild) {
     return (
       name === CONFIG.HUB_NAME ||
       name === 'escape-room-hub' ||
+      name === CONFIG.LOUNGE_NAME ||
+      name === 'lounge' ||
       name === CONFIG.LOG_NAME ||
       name === 'escape-log' ||
       /^answer-/.test(name) ||
@@ -335,11 +367,13 @@ function buildCommands() {
 
     new SlashCommandBuilder()
       .setName('setup')
-      .setDescription('🔧 [ADMIN] Create all roles and channels'),
+      .setDescription('🔧 [ADMIN] Create all roles and channels')
+      .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator.toString()),
 
     new SlashCommandBuilder()
       .setName('teardown')
       .setDescription('🔧 [ADMIN] Delete ALL escape-room channels & roles (then run /setup again)')
+      .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator.toString())
       .addStringOption(o => o
         .setName('confirm')
         .setDescription('Type "yes" to confirm — this deletes channels and roles')
@@ -348,6 +382,7 @@ function buildCommands() {
     new SlashCommandBuilder()
       .setName('reset')
       .setDescription('🔧 [ADMIN] Reset a player')
+      .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator.toString())
       .addUserOption(o => o.setName('player').setDescription('The player').setRequired(true))
       .addStringOption(o => o
         .setName('story')
@@ -357,11 +392,13 @@ function buildCommands() {
 
     new SlashCommandBuilder()
       .setName('newstory')
-      .setDescription('🔧 [ADMIN] Announce a new story to winners'),
+      .setDescription('🔧 [ADMIN] Announce a new story to winners')
+      .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator.toString()),
 
     new SlashCommandBuilder()
       .setName('serverprogress')
-      .setDescription('🔧 [ADMIN] See everyone\'s progress'),
+      .setDescription('🔧 [ADMIN] See everyone\'s progress')
+      .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator.toString()),
   ].map(c => c.toJSON());
 }
 
@@ -406,7 +443,24 @@ process.on('unhandledRejection', err => console.error('Unhandled rejection:', er
 // 💬  COMMAND HANDLERS
 // ────────────────────────────────────────────────────────────────
 async function handleCommand(interaction) {
-  const { commandName, member, guild } = interaction;
+  const { commandName, member, guild, channel } = interaction;
+
+  // ── Channel restrictions (enforced in code; Discord permissions
+  //    can't limit *which* command works in *which* channel) ───────
+  // /startstory must be used in the hub.
+  if (commandName === 'startstory' && channel?.name !== CONFIG.HUB_NAME) {
+    return interaction.reply({
+      content: `❌ Use \`/startstory\` in the **#${CONFIG.HUB_NAME}** channel.`,
+      ephemeral: true,
+    });
+  }
+  // /answer and /hint must be used in an answer channel (answer-<story>-l<level>).
+  if ((commandName === 'answer' || commandName === 'hint') && !/^answer-/.test(channel?.name ?? '')) {
+    return interaction.reply({
+      content: '❌ Use this command in your **answer channel** (the `answer-…` channel for your current level).',
+      ephemeral: true,
+    });
+  }
 
   // ── /startstory ──────────────────────────────────────────────
   if (commandName === 'startstory') {
