@@ -12,6 +12,7 @@ module.exports = {
   description: 'Black Reef lighthouse has stood empty for forty years, ever since keeper Alma Brandt walked up the stairs one storm and never came down. You volunteered to spend one night logging the structure. Tonight, the dead light flickers on by itself.',
   emoji: '🗼',
   color: '#1abc9c',
+  difficultyLabel: 'Easy',
 
   levels: [
     {
@@ -53,9 +54,9 @@ Each group separated by spaces is one letter. Decode the four letters from the l
       ],
       answers: ['reef', 'the reef', 'black reef'],
       hints: [
-        '💡 Use the morse card. Four groups: `.-.` `.` `.` `..-.`',
-        '💡 `.-.`=R, `.`=E, `.`=E, `..-.`=F.',
-        '💡 The word is REEF — the rocks this lighthouse warns ships about.',
+        '💡 The flash pattern is in the keeper\'s log; the morse card tells you how to read it. Take one group at a time.',
+        '💡 Four groups, four letters. The shortest groups are the most common letters in English.',
+        '💡 Once you have the four letters, say them aloud — it\'s the very danger this tower exists to warn ships about.',
       ],
       successMessage: `🔓 **REEF. The lamp above you flares once.**
 
@@ -99,9 +100,9 @@ Echoes and silence, then nothing at all.
       ],
       answers: ['escape', 'to escape'],
       hints: [
-        '💡 Read only the first letter of each line, top to bottom.',
-        '💡 Lines start with: E, S, C, A, P, E.',
-        '💡 Straight down it spells ESCAPE.',
+        '💡 The margin note tells you exactly how to read it. The poem itself doesn\'t matter — only its edges.',
+        '💡 First letter of each line, top to bottom. Six lines, six letters.',
+        '💡 It\'s a single six-letter word — what Alma never managed to do from this tower.',
       ],
       successMessage: `🔓 **ESCAPE. The gate swings inward.**
 
@@ -140,16 +141,16 @@ A B C D E F G H I J K L M
 Z Y X W V U T S R Q P O N
 \`\`\`
 
-So H↔S, S↔H, L↔O, I↔R, V↔E.
+The first letter swaps with the last, the second with the second-to-last, and so on.
 
 Mirror every letter of \`HSLIV\` to read the word.`,
         },
       ],
       answers: ['shore', 'the shore'],
       hints: [
-        '💡 Atbash mirrors the alphabet: A↔Z, B↔Y... Use the key on each letter.',
-        '💡 H→S, S→H, L→O, I→R, V→E.',
-        '💡 HSLIV mirrors to SHORE.',
+        '💡 It\'s a mirror cipher — the key on the glass shows how each letter flips to its opposite end of the alphabet.',
+        '💡 Work letter by letter through `HSLIV` using the key. The result is five letters.',
+        '💡 It names the place Alma kept staring toward — where the land meets the water.',
       ],
       successMessage: `🔓 **SHORE.**
 
@@ -201,9 +202,9 @@ Continue the last two moves (D, D) and read all five letters in order. That word
       ],
       answers: ['tower', 'the tower'],
       hints: [
-        '💡 Track row & column. Right adds 1 to the column; Down adds 1 to the row.',
-        '💡 Path tiles: T(R1C1) → O(R1C2) → W(R1C3) → E(R2C3) → R(R3C3).',
-        '💡 The five letters spell TOWER.',
+        '💡 Start on the ★ tile and apply the moves one at a time, writing down each letter you land on.',
+        '💡 Right means column +1, Down means row +1. Don\'t skip the starting letter — five letters total.',
+        '💡 Fittingly, the five letters spell the very thing you\'ve been climbing all night.',
       ],
       successMessage: `🔓 **TOWER.**
 
@@ -239,9 +240,9 @@ Assemble the first letters of your four previous WORD answers, in order, and sub
       ],
       answers: ['rest', 'to rest', 'let me rest'],
       hints: [
-        '💡 Only the WORD answers count, in order: Level 1, 2, 3, 4.',
-        '💡 Those words were: REEF, ESCAPE, SHORE, TOWER.',
-        '💡 First letters R, E, S, T → REST. That is what Alma has been asking for.',
+        '💡 Look back at the four WORD answers you gave — not the numbers. The order you found them matters.',
+        '💡 Take the first letter of each of those four words, in order.',
+        '💡 Four letters — it\'s what the dead are owed, and what Alma has been begging for all these years.',
       ],
       successMessage: `🔓 **REST.**
 

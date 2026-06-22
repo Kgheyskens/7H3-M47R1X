@@ -10,6 +10,7 @@ module.exports = {
   description: 'The year is 1987. You are radio technician Ernest Vermeer. One night you pick up a signal from people who vanished — not dead, but wedged between frequencies. You are their only hope.',
   emoji: '📻',
   color: '#5865f2',
+  difficultyLabel: 'Medium',
 
   levels: [
     {
@@ -38,16 +39,16 @@ But what ended there? Where does a radio signal end?`,
 Radio signals end at a receiver. But people say a signal really ends at the *antenna*.
 
 My mentor always wrote:
-> *"The signal does not end at the device — it ends at the ear."*
+> *"The signal does not end at the device — it ends at the auris."*
 
-In Latin he called the ear: **auris**. In plain English: **ear**.`,
+But what doe the auris mean?`,
         },
       ],
-      answers: ['ear', 'the ear', 'auris'],
+      answers: ['ear', 'the ear'],
       hints: [
         '💡 Read the diary. Where does a radio signal normally end?',
-        '💡 Check the technical notes — what did the mentor write?',
-        '💡 The answer is one word. Think of the body part you listen with.',
+        '💡 Check the technical notes what did the mentor write?',
+        '💡 Auris... mhhh it sounds like something Latin..',
       ],
       successMessage: `🔓 **Correct. The signal ends at the ear.**
 
@@ -95,8 +96,8 @@ Space between letters = one space. Space between words = /`,
       answers: ['code', 'the code'],
       hints: [
         '💡 Use the morse table to decode the signal.',
-        '💡 Each group separated by a space is one letter. The first is C.',
-        '💡 The morse spells a 4-letter word: C-O-D-E.',
+        '💡 Each group separated by a space is one letter.',
+        '💡 The morse spells a 4-letter word',
       ],
       successMessage: `🔓 **CODE. Correct.**
 
@@ -197,9 +198,9 @@ The 12th number unlocks the next layer.
       ],
       answers: ['144', 'one hundred forty four', 'one hundred and forty four'],
       hints: [
-        '💡 It is the Fibonacci sequence. Each number = the sum of the two before it.',
-        '💡 The table stops at position 11 (value 89). What is 89 + 55?',
-        '💡 The 12th Fibonacci number is 144.',
+        '💡 It is the Fibonacci sequence.',
+        '💡 Position has nothing to do with the Value you need to get',
+        '💡 The first numbber you can find by 1... 2nd is 1 + nothing, 3rd is 1+1 (2), 4th is 1+2 (3), 5th is 2+3 (5) etc etc.',
       ],
       successMessage: `🔓 **144. The frequency jumps.**
 
@@ -242,14 +243,14 @@ If the shift is 3, you go 3 positions back.
 Alphabet: A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
 \`\`\`
 
-Example: W shifted back 3 = T. H-3 = E. O-3 = L. Z-3 = W.`,
+Example: W shifted back 4 = S. H = D. O = K. Z = V, etc.`,
         },
       ],
-      answers: ['hush', 'be hush'],
+      answers: ['hush', 'HUSH'],
       hints: [
-        '💡 The shift = the number of people who vanished = 3. Shift every letter back 3.',
-        '💡 W→T, H→E, O→L, O→L … the first word is TELL.',
-        '💡 The full line is "TELL THEM TO HUSH". Submit ONLY the last word: HUSH.',
+        '💡 The shift = the number of people who vanished = 3.',
+        '💡 Shift every letter back 3 places. ',
+        '💡 The full line is "TELL THEM TO HUSH".',
       ],
       successMessage: `🔓 **HUSH.**
 
@@ -285,12 +286,10 @@ The clues are scrawled across the other notes in this wing. Cross them off until
 
 What the night guard scribbled, in order:
 
-1. *"The cell is **not** at either end of the row."* (so not room 1, not room 5)
-2. *"It is **not** directly next to the boiler in room 2."* (so not room 1, not room 3)
+1. *"The cell is **not** at either end of the row."*
+2. *"It is **not** directly next to the boiler in room 2."*
 3. *"Her number is **even**."*
-4. *"I always reach it **before** room 5 on my round, and **after** room 2."*
-
-Only one room survives all four statements.`,
+4. *"I always reach it **before** room 5 on my round, and **after** room 2."*`,
         },
         {
           name: 'marta-margin-note',
@@ -307,8 +306,8 @@ Only one room survives all four statements.`,
       answers: ['4', 'four', 'room 4'],
       hints: [
         '💡 Write out rooms 1-5 and cross off as each clue forbids one.',
-        '💡 Clue 1 removes 1 & 5. Clue 2 removes 3. That leaves 2 and 4. Clue 3 says even — both are even, so use clue 4.',
-        '💡 Clue 4: after room 2 and before room 5 → must be 3 or 4; combined with the others only **4** survives.',
+        '💡 Every clue eliminates a possible door.',
+        '💡 Read the words carefully, try to assign each line to a door te eliminate possible doors.',
       ],
       successMessage: `🔓 **Room 4. The lock releases.**
 
@@ -362,8 +361,8 @@ Write what you said as digits. That string of digits is the answer.`,
       answers: ['312211'],
       hints: [
         '💡 This is the "look and say" sequence. You read the previous line aloud and write down what you hear.',
-        '💡 Describe 111221: three 1s, then two 2s, then one 1.',
-        '💡 "three 1s, two 2s, one 1" → 3-1, 2-2, 1-1 → 312211.',
+        '💡 You have to describe 111221',
+        '💡 three 1s, then two 2s, then one 1.....',
       ],
       successMessage: `🔓 **312211. The machine trembles.**
 
@@ -401,8 +400,7 @@ The bridge accepts only the **decimal** value.`,
 Each position is worth a power of two. Add the values where there is a **1**:
 
 \`\`\`
-position:  128  64  32  16   8   4   2   1
- bit:        1   0   1   1   0   1   1   1
+byte values:  128  64  32  16   8   4   2   1
 \`\`\`
 
 Add up only the columns that show a 1. That total is the answer.`,
@@ -410,9 +408,9 @@ Add up only the columns that show a 1. That total is the answer.`,
       ],
       answers: ['183', 'one hundred eighty three', 'one hundred and eighty three'],
       hints: [
-        '💡 Binary 10110111. Add the place-values where the bit is 1: 128, 32, 16, 4, 2, 1.',
-        '💡 128 + 32 + 16 = 176. Then + 4 + 2 + 1.',
-        '💡 128+32+16+4+2+1 = 183.',
+        '💡 Binary 10110111. Add the place-values where the bit is 1',
+        '💡 You need 128, 32, 16, 4, 2 and 1.',
+        '💡 simply add the numbers together, the combined total is the answer.',
       ],
       successMessage: `🔓 **183. The bridge activates.**
 
@@ -453,16 +451,16 @@ A B C D E F G H I J K L M
 Z Y X W V U T S R Q P O N
 \`\`\`
 
-So A↔Z, B↔Y, L↔O, N↔M, V↔E, T↔G, Z↔A.
+So A↔Z, E↔V, L↔O, G↔T, V↔E, J↔Q, I↔R.
 
-Mirror each letter of \`LNVTZ\` to read the word. It is the last letter of the Greek alphabet — the end of all things.`,
+Mirror each letter of \`LNVTZ\` to read the word.`,
         },
       ],
-      answers: ['omega', 'the omega', 'ω'],
+      answers: ['omega', 'the omega', 'ω', 'OMEGA'],
       hints: [
         '💡 Atbash mirrors the alphabet: A↔Z, B↔Y, and so on. Use the key.',
+        '💡 It is the last letter of the Greek alphabet — the end of all things.',
         '💡 L→O, N→M, V→E, T→G, Z→A.',
-        '💡 LNVTZ mirrors to OMEGA — the final Greek letter.',
       ],
       successMessage: `🔓 **OMEGA. The portal stabilizes.**
 
@@ -489,7 +487,7 @@ Ernest turns to you:
 
 *"Four of the doors you opened were sealed with a **word**, not a number. Four words. Take the **first letter of each one**, in the order you found them, and you'll have the master code.*
 
-*The numbers along the way were just locks. The words were the message all along.*
+*The numbers along the way were just locks. The words were the message all along... I hope you still remembered..*
 
 *Assemble the four letters. It spells what a signal becomes when it has nowhere left to go — it bounces back, it repeats, it refuses to die.*
 
@@ -498,9 +496,9 @@ Ernest turns to you:
       ],
       answers: ['echo', 'an echo', 'the echo'],
       hints: [
-        '💡 Only four levels had WORD answers (not numbers). Find those four levels and note their answers.',
+        '💡 Only four levels had WORD answers (not numbers).',
         '💡 The word-answers were: Level 1 (a body part), Level 2 (a 4-letter morse word), Level 5 (decoded Caesar), Level 9 (decoded Atbash).',
-        '💡 First letters of Ear, Code, Hush, Omega → E, C, H, O → rearrange in order → ECHO.',
+        '💡 The words were Ear, Code, Hush and Omega.',
       ],
       successMessage: `🔓 **ECHO.**
 
@@ -510,7 +508,7 @@ For the first time in 37 years: absolute silence in Station Red-7.
 
 Marta cries. Peter laughs. Ernest takes off his headphones.
 
-**You brought them home.**
+**You brought them home... Finally they can rest.**
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━
 🏆 **THE FORGOTTEN FREQUENCY — COMPLETED**

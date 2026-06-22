@@ -22,7 +22,7 @@
 const http = require('http');
 const {
   Client, GatewayIntentBits, SlashCommandBuilder, EmbedBuilder,
-  PermissionsBitField, REST, Routes, ChannelType,
+  PermissionsBitField, REST, Routes, ChannelType, Partials,
 } = require('discord.js');
 require('dotenv').config();
 
@@ -41,6 +41,17 @@ const CONFIG = {
   LOG_NAME:   'escape-log',
   HUB_NAME:   'escape-room-hub', // public channel where players pick a story
   LOUNGE_NAME:'lounge',          // public free-chat channel (players may type here)
+  // ── Entry gate channels (visible to everyone, even before verifying) ──
+  WELCOME_NAME: 'welcome',       // bot greets new members here
+  RULES_NAME:   'rules',         // rules + ✅ reaction to gain access
+  BUMP_NAME:    'bump',          // Disboard bump reminders
+  // ── Roles ──
+  MEMBER_ROLE:  'Member',        // granted after accepting the rules; unlocks the server
+  BUMPER_ROLE:  'Bumper',        // opt-in: pinged when it's time to bump again
+  // ── Disboard ──
+  DISBOARD_ID:  '302050872383242240', // Disboard bot user id (for bump auto-detect)
+  BUMP_INTERVAL_MS: 2 * 60 * 60 * 1000, // 2 hours
+  GATE_CHECK: '✅',              // the reaction emoji used on the rules message
   PORT:       process.env.PORT || 3000,
 };
 
@@ -69,7 +80,11 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessageReactions,
   ],
+  // Partials let us receive reaction events on messages that aren't in the
+  // cache (e.g. the rules message posted before the last restart).
+  partials: [Partials.Message, Partials.Channel, Partials.Reaction],
 });
 
 // ────────────────────────────────────────────────────────────────
@@ -77,6 +92,9 @@ const client = new Client({
 // hintCounters: Map<userId, Map<"storyId-levelId", hintIndex>>
 // ────────────────────────────────────────────────────────────────
 const hintCounters = new Map();
+
+// Bump reminder: one pending timer per guild, so we don't stack reminders.
+const bumpTimers = new Map(); // Map<guildId, NodeJS.Timeout>
 
 function hintKey(storyId, levelId) { return `${storyId}-${levelId}`; }
 
@@ -113,6 +131,124 @@ async function getOrCreateRole(guild, name, color) {
 const DIFF_COLOR = ['#99aab5', '#57f287', '#3498db', '#9b59b6', '#ffd700'];
 function diffColor(d) { return DIFF_COLOR[Math.min(Math.max(d - 1, 0), DIFF_COLOR.length - 1)]; }
 
+// Story difficulty badge (shown next to the story name). Maps the
+// story's difficultyLabel to a coloured circle. Defaults to Medium.
+const DIFF_EMOJI = {
+  easy: '🟢', medium: '🟡', hard: '🔴', 'very hard': '⚫',
+};
+function diffBadge(story) {
+  const label = story.difficultyLabel ?? 'Medium';
+  const dot = DIFF_EMOJI[label.toLowerCase()] ?? '🟡';
+  return `${dot} ${label}`;
+}
+
+// ────────────────────────────────────────────────────────────────
+// 📜  GATE EMBEDS (welcome / rules / bump)
+// ────────────────────────────────────────────────────────────────
+function buildWelcomeEmbed(guild) {
+  return new EmbedBuilder()
+    .setColor('#57f287')
+    .setTitle(`👋 Welcome to ${guild.name}!`)
+    .setDescription(
+      `Glad you found us. This is a **co-op escape-room server** — a growing collection of story-driven puzzle rooms you crack with ciphers, riddles and logic.\n\n` +
+      `**What's inside, once you're in:**\n` +
+      `• 🎮 **#escape-room-hub** — pick a story with \`/startstory\` and play at your own pace\n` +
+      `• 🧩 Multiple stories from 🟢 Easy to 🔴 Hard, each with several levels\n` +
+      `• 💬 **#lounge** — hang out and chat with other players (no spoilers!)\n` +
+      `• 🏆 Per-story **winners** channels where finishers can finally talk answers\n` +
+      `• 📣 **#bump** — help us grow by bumping the server\n\n` +
+      `**One step first:** head to **#rules**, give them a read, and react with ✅ to accept. ` +
+      `That unlocks the rest of the server. See you inside!`)
+    .setFooter({ text: 'React ✅ in #rules to enter' });
+}
+
+function buildRulesEmbed() {
+  return new EmbedBuilder()
+    .setColor('#5865f2')
+    .setTitle('📜 Server Rules — react ✅ to accept and enter')
+    .setDescription(
+      `By reacting ✅ below you confirm you've read and agree to these rules. ` +
+      `Accepting unlocks **#lounge**, **#escape-room-hub** and the rest of the server.\n\n` +
+      `**1. Be respectful.** No harassment, hate speech, slurs or personal attacks. Treat everyone well.\n\n` +
+      `**2. No NSFW or illegal content.** Keep it clean — text, images, links, names, all of it.\n\n` +
+      `**3. No spam or self-promo.** No unsolicited ads, invites or DMs to members.\n\n` +
+      `**4. 🚫 NO SPOILERS in #lounge.** Never post puzzle answers, solutions or strong hints in the lounge or any general channel. This is the big one — spoiling a room ruins it for everyone.\n\n` +
+      `**5. Discuss answers only where it's allowed.** Once you **complete a room**, you may talk freely about that room's puzzles in **that room's winners channel** — never anywhere else.\n\n` +
+      `**6. Don't cheat the bot.** No exploiting, no sharing answer lists, no alt-account shenanigans. Play it straight — that's the whole fun.\n\n` +
+      `**7. Use the right channels.** Commands go in their channels; chit-chat goes in #lounge.\n\n` +
+      `**8. Follow Discord's Terms of Service & Community Guidelines** at all times.\n\n` +
+      `Staff have final say. Breaking these may cost you roles or access.`)
+    .setFooter({ text: 'React ✅ to accept the rules and unlock the server' });
+}
+
+function buildBumpInfoEmbed() {
+  return new EmbedBuilder()
+    .setColor('#eb459e')
+    .setTitle('📣 Help us grow — bump the server!')
+    .setDescription(
+      `We're listed on **Disboard**. Every **2 hours** anyone can bump us back to the top of the listings so more puzzle-lovers find us.\n\n` +
+      `**How to bump:** type \`/bump\` right here in this channel. That's it.\n\n` +
+      `I'll keep track of the cooldown and post here the moment we can bump again.\n\n` +
+      `🔔 **Want a reminder ping?** React 🔔 below to grab the **@Bumper** role and I'll tag you when it's time. React again to remove it.`)
+    .setFooter({ text: 'Disboard bumps every 2 hours · /bump' });
+}
+
+// ────────────────────────────────────────────────────────────────
+// 📣  DISBOARD BUMP REMINDER
+// When Disboard confirms a bump, we wait 2h then ping @Bumper in #bump.
+// Disboard's success embed contains "Bump done" — we detect that.
+// ────────────────────────────────────────────────────────────────
+function isDisboardBumpSuccess(message) {
+  // Disboard confirms via an embed. Match on the well-known phrase, with a
+  // fallback to the description, so a minor wording change won't break it.
+  const texts = [];
+  for (const e of message.embeds ?? []) {
+    if (e.description) texts.push(e.description);
+    if (e.title) texts.push(e.title);
+    for (const f of e.fields ?? []) { texts.push(f.name); texts.push(f.value); }
+  }
+  if (message.content) texts.push(message.content);
+  const blob = texts.join('\n').toLowerCase();
+  return blob.includes('bump done') || blob.includes('bumped');
+}
+
+async function handleDisboardMessage(message) {
+  if (!isDisboardBumpSuccess(message)) return;
+  const guild = message.guild;
+  await log(guild, '📣 Disboard bump detected — reminder scheduled in 2h');
+  scheduleBumpReminder(guild, CONFIG.BUMP_INTERVAL_MS);
+}
+
+function scheduleBumpReminder(guild, delayMs) {
+  // Replace any existing timer so we always count from the latest bump.
+  const existing = bumpTimers.get(guild.id);
+  if (existing) clearTimeout(existing);
+
+  const timer = setTimeout(async () => {
+    bumpTimers.delete(guild.id);
+    try {
+      const bump = guild.channels.cache.find(
+        c => c.name === CONFIG.BUMP_NAME && c.type === ChannelType.GuildText);
+      if (!bump) return;
+      const bumperRole = guild.roles.cache.find(r => r.name === CONFIG.BUMPER_ROLE);
+      const mention = bumperRole ? `${bumperRole}` : '';
+      await bump.send({
+        content: mention,
+        embeds: [new EmbedBuilder()
+          .setColor('#eb459e')
+          .setTitle('⏰ Time to bump again!')
+          .setDescription('The 2-hour cooldown is up. Run `/bump` here to push us back to the top of Disboard. Thank you! 💜')],
+      }).catch(() => {});
+    } catch (e) {
+      console.error('Bump reminder error:', e.message);
+    }
+  }, delayMs);
+
+  // Don't let the timer keep the process alive on its own.
+  if (timer.unref) timer.unref();
+  bumpTimers.set(guild.id, timer);
+}
+
 // ────────────────────────────────────────────────────────────────
 // 🏗️  SETUP — builds every channel & role for every story
 // ────────────────────────────────────────────────────────────────
@@ -145,14 +281,80 @@ async function runSetup(guild) {
     return ch;
   }
 
-  // 1. Public hub category.
+  // ── 0. ENTRY GATE ────────────────────────────────────────────
+  // New members must accept the rules (✅ react) before they can see
+  // anything but #welcome and #rules. We do this with a "Member" role:
+  //   • @everyone: denied ViewChannel on the real server (hub, lounge, bump…)
+  //   • Member role: allowed ViewChannel
+  //   • #welcome and #rules: visible to @everyone (read-only)
+  // Reacting ✅ on the rules message grants the Member role (see the
+  // messageReactionAdd listener), which reveals the rest of the server.
+  const memberRole = await getOrCreateRole(guild, CONFIG.MEMBER_ROLE, '#57f287');
+  const bumperRole = await getOrCreateRole(guild, CONFIG.BUMPER_ROLE, '#eb459e');
+
+  // START HERE category — the ONLY thing an unverified member can see.
+  const gateCat = await mkCategory('👋 START HERE', [
+    {
+      id: guild.id,
+      allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory],
+      deny:  [PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AddReactions],
+    },
+    ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.AddReactions] }] : []),
+  ]);
+
+  // #welcome — bot greeting. Read-only for everyone.
+  const welcome = await mkChannel(CONFIG.WELCOME_NAME, gateCat, 'Welcome! Start here.');
+  const welcomeMsgs = await welcome.messages.fetch({ limit: 5 });
+  if (welcomeMsgs.size === 0) {
+    await welcome.send({ embeds: [buildWelcomeEmbed(guild)] });
+  }
+
+  // #rules — rules embed + ✅ reaction gate.
+  const rules = await mkChannel(CONFIG.RULES_NAME, gateCat, 'Read and accept the rules to enter');
+  const rulesMsgs = await rules.messages.fetch({ limit: 5 });
+  let rulesMsg = rulesMsgs.find(m => m.author.id === client.user.id && m.embeds.length);
+  if (!rulesMsg) {
+    rulesMsg = await rules.send({ embeds: [buildRulesEmbed()] });
+  }
+  // Make sure our ✅ is on it so members have something to click.
+  await rulesMsg.react(CONFIG.GATE_CHECK).catch(() => {});
+  messages.push('✅ Welcome & Rules gate created');
+
+  // Backfill: every CURRENT human member keeps access (new joiners don't).
+  let granted = 0;
+  const allMembers = await guild.members.fetch();
+  for (const [, m] of allMembers) {
+    if (m.user.bot) continue;
+    if (!m.roles.cache.has(memberRole.id)) {
+      await m.roles.add(memberRole).then(() => granted++).catch(() => {});
+    }
+  }
+  messages.push(`✅ Member role granted to ${granted} existing member(s)`);
+
+  // #bump — Disboard reminders. Part of the real server (Member-gated).
+  const bumpCat = await mkCategory('📣 COMMUNITY', [
+    { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+    { id: memberRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.SendMessages] },
+    ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.AddReactions] }] : []),
+  ]);
+  const bump = await mkChannel(CONFIG.BUMP_NAME, bumpCat, 'Bump the server on Disboard every 2 hours');
+  const bumpMsgs = await bump.messages.fetch({ limit: 5 });
+  let bumpOptIn = bumpMsgs.find(m => m.author.id === client.user.id && m.embeds.length);
+  if (!bumpOptIn) {
+    bumpOptIn = await bump.send({ embeds: [buildBumpInfoEmbed()] });
+  }
+  await bumpOptIn.react('🔔').catch(() => {});
+  messages.push('✅ Bump channel created');
+
+  // 1. Public hub category — now gated behind the Member role.
   //    NOTE: Discord requires BOTH SendMessages AND UseApplicationCommands for
   //    a user to run a slash command. So we must ALLOW SendMessages here, and
   //    instead keep the channel chat-free by auto-deleting any human message
   //    (see the messageCreate listener further down). The #lounge is exempt.
   const hubCat = await mkCategory('🎮 ESCAPE ROOM', [
+    { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
     {
-      id: guild.id,
+      id: memberRole.id,
       allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.UseApplicationCommands],
     },
     ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages] }] : []),
@@ -169,7 +371,7 @@ async function runSetup(guild) {
         'Welcome. Several stories are waiting for you.\n\n' +
         'Use `/startstory` to begin. You can play multiple stories at once.\n\n' +
         stories
-          .map(s => `${s.emoji} **${s.name}** — ${s.levels.length} levels\n*${s.description}*`)
+          .map(s => `${s.emoji} **${s.name}** — ${s.levels.length} levels · ${diffBadge(s)}\n*${s.description}*`)
           .join('\n\n'))
       .setFooter({ text: '/startstory · /answer · /hint · /myprogress' });
     await hub.send({ embeds: [embed] });
@@ -264,6 +466,7 @@ async function runTeardown(guild) {
   // Top-level category names the bot uses (English + old Dutch).
   const categoryPrefixes = [
     '🎮 ESCAPE ROOM', '⚙️ ADMIN',
+    '👋 START HERE', '📣 COMMUNITY', // entry gate + bump
     '🏆',                       // "🏆 STORY — COMPLETED" / "🏆 ... — VOLTOOID"
   ];
   // Per-story level categories start with the story emoji + name; we match
@@ -284,6 +487,9 @@ async function runTeardown(guild) {
       name === 'lounge' ||
       name === CONFIG.LOG_NAME ||
       name === 'escape-log' ||
+      name === CONFIG.WELCOME_NAME ||
+      name === CONFIG.RULES_NAME ||
+      name === CONFIG.BUMP_NAME ||
       /^answer-/.test(name) ||
       /^antwoord-/.test(name) ||              // old Dutch answer channels
       /-winners$/.test(name) ||
@@ -310,12 +516,14 @@ async function runTeardown(guild) {
     }
   }
 
-  // 3. Delete the bot's roles (level roles + winner roles, English + Dutch).
+  // 3. Delete the bot's roles (level roles + winner roles, English + Dutch,
+  //    plus the gate roles).
   for (const [, role] of guild.roles.cache) {
     const n = role.name;
     const isLevelRole   = /-L\d+$/.test(n);
     const isWinnerRole  = /-completed$/.test(n) || /-voltooid$/.test(n);
-    if (isLevelRole || isWinnerRole) {
+    const isGateRole    = n === CONFIG.MEMBER_ROLE || n === CONFIG.BUMPER_ROLE;
+    if (isLevelRole || isWinnerRole || isGateRole) {
       await role.delete('Escape Room teardown').then(() => rolesDeleted++).catch(() => {});
     }
   }
@@ -329,6 +537,13 @@ async function runTeardown(guild) {
 function buildCommands() {
   const stories = allStories();
   const storyChoices = stories.map(s => ({ name: `${s.emoji} ${s.name}`, value: s.id }));
+  // Same list, but with the difficulty shown — used for /startstory so
+  // players can see how hard a story is before they pick it. (Discord
+  // choice names cap at 100 chars; story names are short, so we're safe.)
+  const startChoices = stories.map(s => {
+    const dot = DIFF_EMOJI[(s.difficultyLabel ?? 'Medium').toLowerCase()] ?? '🟡';
+    return { name: `${s.emoji} ${s.name} — ${dot} ${s.difficultyLabel ?? 'Medium'}`, value: s.id };
+  });
 
   return [
     new SlashCommandBuilder()
@@ -338,7 +553,7 @@ function buildCommands() {
         .setName('story')
         .setDescription('Which story do you want to play?')
         .setRequired(true)
-        .addChoices(...storyChoices)),
+        .addChoices(...startChoices)),
 
     new SlashCommandBuilder()
       .setName('answer')
@@ -462,8 +677,17 @@ function isManagedSilentChannel(ch) {
 }
 
 client.on('messageCreate', async message => {
-  if (message.author.bot) return;                 // ignore the bot's own messages
   if (!message.guild) return;                     // ignore DMs
+
+  // ── Disboard bump auto-detect ───────────────────────────────
+  // Disboard posts an embed confirming a successful bump. When we see it
+  // in #bump, start the 2-hour countdown and remind @Bumper afterwards.
+  if (message.author.id === CONFIG.DISBOARD_ID && message.channel?.name === CONFIG.BUMP_NAME) {
+    await handleDisboardMessage(message);
+    return;
+  }
+
+  if (message.author.bot) return;                 // ignore other bots & ourselves
   // Admins may type anywhere (e.g. to post puzzle content or moderate).
   if (message.member?.permissions.has(PermissionsBitField.Flags.Administrator)) return;
   if (!isManagedSilentChannel(message.channel)) return;
@@ -471,6 +695,77 @@ client.on('messageCreate', async message => {
     console.error(`⚠️  Could not delete message in #${message.channel?.name}: ${err.message}. ` +
                   `Does the bot have the "Manage Messages" permission there?`));
 });
+
+// ── New member joins → greet in #welcome, gate stays closed ─────
+// They join with NO Member role, so they can only see #welcome + #rules
+// until they react ✅ on the rules message.
+client.on('guildMemberAdd', async member => {
+  if (member.user.bot) return;
+  const welcome = member.guild.channels.cache.find(
+    c => c.name === CONFIG.WELCOME_NAME && c.type === ChannelType.GuildText);
+  if (!welcome) return;
+  await welcome.send({
+    content: `${member} just arrived! 👋`,
+    embeds: [new EmbedBuilder()
+      .setColor('#57f287')
+      .setDescription(
+        `Welcome, ${member}! 🎉\n\n` +
+        `Head to **#${CONFIG.RULES_NAME}**, read the rules, and react ✅ to unlock the server and start cracking rooms.`)],
+  }).catch(() => {});
+  await log(member.guild, `👋 **${member.user.tag}** joined the server`);
+});
+
+// ── Rules ✅ gate + Bumper 🔔 opt-in ────────────────────────────
+client.on('messageReactionAdd', async (reaction, user) => {
+  await handleGateReaction(reaction, user, true);
+});
+client.on('messageReactionRemove', async (reaction, user) => {
+  await handleGateReaction(reaction, user, false);
+});
+
+async function handleGateReaction(reaction, user, added) {
+  try {
+    if (user.bot) return;
+    // Resolve partials (reaction/message may not be cached).
+    if (reaction.partial) await reaction.fetch();
+    if (reaction.message.partial) await reaction.message.fetch();
+
+    const msg = reaction.message;
+    const guild = msg.guild;
+    if (!guild) return;
+    const channelName = msg.channel?.name;
+    const emoji = reaction.emoji.name;
+
+    // Rules ✅ → grant/remove the Member role.
+    if (channelName === CONFIG.RULES_NAME && emoji === CONFIG.GATE_CHECK) {
+      const role = guild.roles.cache.find(r => r.name === CONFIG.MEMBER_ROLE);
+      if (!role) return;
+      const member = await guild.members.fetch(user.id).catch(() => null);
+      if (!member) return;
+      if (added) {
+        await member.roles.add(role).catch(() => {});
+        await log(guild, `✅ **${member.user.tag}** accepted the rules`);
+      } else {
+        // Un-reacting revokes access — sends them back to the gate.
+        await member.roles.remove(role).catch(() => {});
+        await log(guild, `↩️ **${member.user.tag}** withdrew rules acceptance`);
+      }
+      return;
+    }
+
+    // Bump 🔔 → toggle the Bumper reminder role.
+    if (channelName === CONFIG.BUMP_NAME && emoji === '🔔') {
+      const role = guild.roles.cache.find(r => r.name === CONFIG.BUMPER_ROLE);
+      if (!role) return;
+      const member = await guild.members.fetch(user.id).catch(() => null);
+      if (!member) return;
+      if (added) await member.roles.add(role).catch(() => {});
+      else await member.roles.remove(role).catch(() => {});
+    }
+  } catch (e) {
+    console.error('Reaction handler error:', e.message);
+  }
+}
 
 // Never let an unhandled rejection kill the process.
 process.on('unhandledRejection', err => console.error('Unhandled rejection:', err));
@@ -522,7 +817,7 @@ async function handleCommand(interaction) {
     const embed = new EmbedBuilder()
       .setColor(story.color ?? '#5865f2')
       .setTitle(`${story.emoji} ${story.name} — Started!`)
-      .setDescription(`${story.description}\n\n**Your adventure begins now.** The Level 1 channels are now visible to you.\n\nUse \`/hint\` if you get stuck.`);
+      .setDescription(`${story.description}\n\n**Difficulty:** ${diffBadge(story)}\n\n**Your adventure begins now.** The Level 1 channels are now visible to you.\n\nUse \`/hint\` if you get stuck.`);
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
     await log(guild, `▶️ **${member.user.tag}** started story "${story.name}"`);

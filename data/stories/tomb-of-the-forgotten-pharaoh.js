@@ -13,6 +13,7 @@ module.exports = {
   description: 'Egypt, 1923. You are archaeologist Dr. Nora Halford. The moment your torch lit the burial chamber, the entrance collapsed behind you. The air is thin and the walls are covered in puzzles left by priests who did not want to be disturbed. Solve them, or join the pharaoh forever.',
   emoji: '🏺',
   color: '#c8a951',
+  difficultyLabel: 'Easy',
 
   levels: [
     {
@@ -49,9 +50,9 @@ Translate the six glyphs on the wall, in order, into letters. They spell one wor
       ],
       answers: ['amulet', 'the amulet', 'an amulet'],
       hints: [
-        '💡 Match each glyph to its letter using the scribe\'s key.',
-        '💡 𓀀=A, 𓁹=M, 𓅓=U, 𓄿=L, 𓆑=E, 𓏏=T.',
-        '💡 The glyphs spell AMULET.',
+        '💡 The scribe\'s key on the papyrus maps every glyph to a letter. Work along the wall one symbol at a time.',
+        '💡 Six glyphs, six letters, read left to right in order.',
+        '💡 It names a protective charm — the kind of treasure you\'d expect to lift first from a tomb.',
       ],
       successMessage: `🔓 **AMULET. A stone slab grinds aside.**
 
@@ -94,9 +95,9 @@ The answer is a single word — the great river of this land.`,
       ],
       answers: ['nile', 'the nile', 'river nile'],
       hints: [
-        '💡 It "runs" (flows), has a "mouth" (delta) and a "bed" (riverbed) but is not alive.',
-        '💡 It is the great river of Egypt — four letters.',
-        '💡 The answer is the NILE.',
+        '💡 Read the riddle literally: something that runs without legs, has a mouth and a bed but never sleeps.',
+        '💡 The priest\'s note says it gives Egypt its life — and that it\'s four letters.',
+        '💡 Every schoolchild knows the name of this river; the world remembers it even though the Greeks called it something else.',
       ],
       successMessage: `🔓 **NILE. Sand pours from a hidden slot and the door rolls back.**
 
@@ -140,9 +141,9 @@ Convert 11-9-14-7 into four letters. They spell a royal title.`,
       ],
       answers: ['king', 'the king'],
       hints: [
-        '💡 Convert each number to its letter: 11=K, 9=I...',
-        '💡 11-9-14-7 → K-I-N-G.',
-        '💡 The title is KING.',
+        '💡 The stone table maps every number to a letter (1=A, 2=B...). Convert the four numbers one at a time.',
+        '💡 Four numbers, four letters, in the order shown.',
+        '💡 The plaque says it\'s the title of the one who lies here — the highest rank in the land.',
       ],
       successMessage: `🔓 **KING. The cartouche splits open.**
 
@@ -181,9 +182,9 @@ A god with the head of a falcon, the sun-disc above him, the wedjat **Eye** pain
       ],
       answers: ['horus', 'the horus', 'god horus'],
       hints: [
-        '💡 The letters S, U, R, O, H spell a famous Egyptian god — the falcon, the Eye.',
-        '💡 Start with H... the son of Osiris and Isis.',
-        '💡 Unscrambled: HORUS.',
+        '💡 Rearrange the five letters S, U, R, O, H into the name of a god.',
+        '💡 The wall painting names him: falcon-headed, son of Osiris and Isis, his eye the sun.',
+        '💡 He\'s the sky-god whose wedjat Eye is painted across the whole chamber — five letters.',
       ],
       successMessage: `🔓 **HORUS. The painted Eye blazes with light.**
 
@@ -213,9 +214,9 @@ Assemble the first letters of your four previous WORD answers, in order, and sub
       ],
       answers: ['ankh', 'the ankh'],
       hints: [
-        '💡 Only the four WORD answers count, in order: Level 1, 2, 3, 4.',
-        '💡 Those words were: AMULET, NILE, KING, HORUS.',
-        '💡 First letters A, N, K, H → ANKH, the Egyptian key of life.',
+        '💡 Look back at the four WORD answers you spoke — not any numbers. The order you found them matters.',
+        '💡 Take the first letter of each of those four words, in order.',
+        '💡 Four letters — the looped symbol the gods carry, the key of eternal life.',
       ],
       successMessage: `🔓 **ANKH.**
 
