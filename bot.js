@@ -48,6 +48,7 @@ const CONFIG = {
   // ── Roles ──
   MEMBER_ROLE:  'Member',        // granted after accepting the rules; unlocks the server
   BUMPER_ROLE:  'Bumper',        // opt-in: pinged when it's time to bump again
+  BUMPER_ROLE_ID: '1518533784050602094', // role ID for direct mention in embeds
   // ── Disboard ──
   DISBOARD_ID:  '302050872383242240', // Disboard bot user id (for bump auto-detect)
   BUMP_INTERVAL_MS: 2 * 60 * 60 * 1000, // 2 hours
@@ -199,8 +200,6 @@ function buildBumpInfoEmbed() {
 // Disboard's success embed contains "Bump done" — we detect that.
 // ────────────────────────────────────────────────────────────────
 function isDisboardBumpSuccess(message) {
-  // Disboard confirms via an embed. Match on the well-known phrase, with a
-  // fallback to the description, so a minor wording change won't break it.
   const texts = [];
   for (const e of message.embeds ?? []) {
     if (e.description) texts.push(e.description);
@@ -212,15 +211,36 @@ function isDisboardBumpSuccess(message) {
   return blob.includes('bump done') || blob.includes('bumped');
 }
 
+function getBumper(message) {
+  return message.interaction?.user ?? message.author ?? null;
+}
+
 async function handleDisboardMessage(message) {
   if (!isDisboardBumpSuccess(message)) return;
   const guild = message.guild;
+  const bumper = getBumper(message);
+
+  try {
+    const bumpChannel = guild.channels.cache.find(
+      c => c.name === CONFIG.BUMP_NAME && c.type === ChannelType.GuildText);
+    if (bumpChannel) {
+      const userMention = bumper ? `<@${bumper.id}>` : 'iemand';
+      await bumpChannel.send({
+        embeds: [new EmbedBuilder()
+          .setColor('#57f287')
+          .setTitle('✅ Thanks for bumping!')
+          .setDescription(`Thanks ${userMention} voor de bump! 💜\nIk ping <@&${CONFIG.BUMPER_ROLE_ID}> over 2 uur.`)],
+      });
+    }
+  } catch (e) {
+    console.error('Bump confirm error:', e.message);
+  }
+
   await log(guild, '📣 Disboard bump detected — reminder scheduled in 2h');
   scheduleBumpReminder(guild, CONFIG.BUMP_INTERVAL_MS);
 }
 
 function scheduleBumpReminder(guild, delayMs) {
-  // Replace any existing timer so we always count from the latest bump.
   const existing = bumpTimers.get(guild.id);
   if (existing) clearTimeout(existing);
 
@@ -230,10 +250,8 @@ function scheduleBumpReminder(guild, delayMs) {
       const bump = guild.channels.cache.find(
         c => c.name === CONFIG.BUMP_NAME && c.type === ChannelType.GuildText);
       if (!bump) return;
-      const bumperRole = guild.roles.cache.find(r => r.name === CONFIG.BUMPER_ROLE);
-      const mention = bumperRole ? `${bumperRole}` : '';
       await bump.send({
-        content: mention,
+        content: `<@&${CONFIG.BUMPER_ROLE_ID}>`,
         embeds: [new EmbedBuilder()
           .setColor('#eb459e')
           .setTitle('⏰ Time to bump again!')
@@ -244,7 +262,6 @@ function scheduleBumpReminder(guild, delayMs) {
     }
   }, delayMs);
 
-  // Don't let the timer keep the process alive on its own.
   if (timer.unref) timer.unref();
   bumpTimers.set(guild.id, timer);
 }

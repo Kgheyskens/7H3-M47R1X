@@ -40,7 +40,7 @@ The screen wakes when you touch it. One line of light:
 
 A brass plate underneath, hand-engraved:
 
-*"Four skins on this onion. Peel them in the right order or the door stays shut. The prize is what every thief is here for — four letters."*
+*"Four skins on this onion. Peel them in the right order or the door stays shut. The prize is what every thief is here for."*
 
 The terminal accepts only the final word. Nothing else.`,
         },
@@ -53,9 +53,7 @@ The terminal accepts only the final word. Nothing else.`,
 Numbers are just letters that learned to count.
 And letters lie — half of mine walk backwards, the rest walk thirteen paces.
 
-Undo it all and you'll be holding what you came for."*
-
-(No table. No order. Figure it out, or hire someone who can.)`,
+Undo it all and you'll be holding what you came for."*`,
         },
       ],
       answers: ['gold', 'the gold'],
@@ -82,7 +80,7 @@ A cold breath of air rolls out of the dark. Beyond it: a corridor of smaller saf
           description: '🔢 Two small safes wired to one four-digit dial.',
           content: `**TWIN SAFES — COMBINED DIAL**
 
-Two readouts feed a single 4-digit dial. You must read each value, then **combine** them.
+Two readouts feed a single 4-digit dial. Read each value, then **combine** them.
 
 **SAFE A** — the readout is text, but scrambled into the alphabet-of-six-bits:
 \`\`\`
@@ -111,8 +109,8 @@ Add. Don't overthink which way — two safes, one sum."*`,
       ],
       answers: ['4096', '4 0 9 6'],
       hints: [
-        '💡 Safe A is wrapped twice: first that "base-sixty-four courier costume", and what falls out is a number written in the base that counts 0-9 then A-F. Safe B is plain binary.',
-        '💡 Turn both readouts into ordinary decimal numbers. One is a few thousand; the other is tiny.',
+        '💡 Safe A is wrapped twice: first that "base-64 courier costume", and what falls out is a number written in the base that counts 0-9 then A-F (base-16).',
+        '💡 Safe B is a simple binary string. It represents \(2^{6}\)',
         '💡 The dial wants the two values brought together as a single total. There are only two ways to combine two numbers — pick the one that grows.',
       ],
       successMessage: `🔓 **4096. The twin safes unlock as one.**
@@ -159,9 +157,9 @@ We never found the keyword in time. You're standing in the answer. Five letters.
       ],
       answers: ['heist', 'the heist'],
       hints: [
-        '💡 The keyword is the five-letter word for the crime you are committing right now. You are standing inside it.',
-        '💡 Strip from the screen inward: hex → numbers, numbers → letters by alphabet position, then a full-alphabet mirror, then undo the keyed shift.',
-        '💡 The "keyed shift" is the famous square-table cipher that repeats a keyword. Run it backwards with that five-letter key and you get the name of the job.',
+        '💡 The readout shows base-16 numbers, this can be converted to decimal numbers from 1-26',
+        '💡 The decimal numbrs can be letters from the alphabet, now mirror it.',
+        '💡 The "keyed shift" is vault (you are inside it). Do a Vigenère-shift on your mirrored letters and the answer will be yours.',
       ],
       successMessage: `🔓 **HEIST. The keyed lock falls open.**
 
@@ -183,7 +181,7 @@ A drawer slides out. Inside, engraved on a steel slug:
           description: '🔢 A four-digit tumbler fed by two odd readouts.',
           content: `**TUMBLER — TWO READOUTS**
 
-**READOUT A** — base-8 (the one that only ever uses digits 0 through 7):
+**READOUT A** — base-8:
 \`\`\`
 1750
 \`\`\`
@@ -204,7 +202,7 @@ Scratched beside the tumbler: *"The big one is written in octal. The small one i
 I = 1    V = 5    X = 10
 L = 50   C = 100  D = 500  M = 1000
 \`\`\`
-A smaller numeral before a larger one subtracts (IV = 4, IX = 9, XL = 40).
+A smaller numeral before a larger one subtracts (IX = 9, XL = 40).
 
 *Decode B, decode the octal A, then combine for the dial.*`,
         },
@@ -233,7 +231,7 @@ A panel drops, revealing a narrow shaft going down. Cold air. Far below, somethi
           description: '🚪 A lock with a zig-zag mechanism behind the faceplate.',
           content: `**RAIL LOCK**
 
-One blob, in that base-sixty-four courier costume again:
+One blob, in that base-64 courier costume again:
 
 \`\`\`
 TFVXVg==
@@ -257,7 +255,7 @@ The shift "count of a perfect week" — how many days is that?`,
       answers: ['open', 'the open'],
       hints: [
         '💡 Outermost layer is the base-64 courier wrapping — undo that first. What\'s left is short.',
-        '💡 Then reverse the string, then undo a 3-rail zig-zag (rail-fence) transposition. You\'re left with four scrambled-looking letters.',
+        '💡 Then reverse the string, then undo a 3-rail zig-zag (rail-fence) transposition. You\'re left with four scrambled-looking letters, place them in order 1-2-3-4.',
         '💡 Last step is a simple letter shift — "a perfect week" is seven. Walk each letter back seven and the lock tells you exactly what to do.',
       ],
       successMessage: `🔓 **OPEN. The rail lock snaps wide.**
@@ -304,7 +302,7 @@ Add them. The vault never subtracts twice in a row."*`,
       ],
       answers: ['2048', '2 0 4 8'],
       hints: [
-        '💡 Safe A: peel the base-64 wrapper, and what\'s inside is a long binary number. Convert it to decimal — it\'s about two thousand.',
+        '💡 Safe A: peel the base-64 wrapper, and what\'s inside is a long binary number. Convert it to decimal',
         '💡 Safe B is hex, just two characters. Small.',
         '💡 Bring the two values together as one total. The creed tells you the vault doesn\'t subtract here.',
       ],
@@ -363,7 +361,7 @@ Each pair is **row then column**. Read the letters out... then remember he mirro
 
 Inside the safe: nothing but a wristwatch, still ticking, set to a time that hasn't happened yet.
 
-*"Tick,"* says the speaker. *"You're slower than you think."*`,
+*"Tick, Tock"* says the speaker. *"You're slower than you think."*`,
     },
 
     // ── L8 ─────────────────────────────────────────────────────
@@ -387,14 +385,14 @@ Inside the safe: nothing but a wristwatch, still ticking, set to a time that has
 20
 \`\`\`
 
-Carved deep, and underlined twice: *"This one is cruel. A is hex, B is octal. The dial does NOT want the sum. It wants what's LEFT when the small one is taken from the big one."*`,
+Carved deep, and underlined twice: *"This one is cruel. A is hex, B is octal. The dial does NOT want the sum. It wants what's left."*`,
         },
         {
           name: 'phantoms-warning',
           description: '⚠️ A warning gouged into the metal.',
           content: `**WARNING — PHANTOM**
 
-*"Everyone adds. Adders die here. Convert both to honest decimal, then SUBTRACT B from A. Three digits. Get greedy and add, and you'll never see daylight."*`,
+*"Everyone adds. Adders die here. Convert both to honest decimal, then provide what's left... Three digits. Get greedy and add, and you'll never see daylight ever again."*`,
         },
       ],
       answers: ['512', '5 1 2'],
@@ -421,7 +419,7 @@ One door left between you and the inner vault. Through the gap you can see it: a
           description: '⏰ The last lock. Five layers deep, and keyed.',
           content: `**FINAL LOCK — FIVE SKINS, KEYED**
 
-The deepest readout yet, in raw on/off:
+The deepest readout yet!:
 
 \`\`\`
 00000101 00011000 00000001 00010110
@@ -442,14 +440,14 @@ A plaque, the Phantom's last words on it:
   — a mirror,
   — and beneath everything, the keyed square-table shift.
 
-The keyword is what I am now: a seven-letter word for a thing that haunts a place it can't leave. I have all the gold in the world and I cannot spend a second of what I really wanted. Four letters. You already know it. You've been racing it all night."*`,
+The keyword is what I am now: a seven-letter word for a thing that haunts a place it can't leave. I have all the gold in the world and I cannot spend a second of what I really wanted. Time is the real enemy here. Tick Tock Tick Tock...."*`,
         },
       ],
       answers: ['time', 'the time'],
       hints: [
         '💡 The keyword is the seven-letter word for what the Phantom became — what haunts a place and can\'t leave. You\'ve seen it hinted all night.',
         '💡 Strip from the screen inward: binary → numbers → letters by position → undo "thirteen paces" → undo a mirror → undo the keyed square-table shift with that seven-letter key.',
-        '💡 Both letter-tricks ("thirteen paces" and "the mirror") are their own inverse. The four-letter answer is the one thing money could never buy back — the thing the clocks have been measuring all night.',
+        '💡 Both letter-tricks ("thirteen paces" and "the mirror") are their own inverse. The four-letter answer is the one thing money could never buy back and what we wish we\'d have more.',
       ],
       successMessage: `🔓 **TIME. The final lock opens.**
 
@@ -488,11 +486,11 @@ Five worn dials wait. Assemble the first letters of your five WORD answers, in o
       ],
       successMessage: `🔓 **GHOST.**
 
-The word lands like a key in a lock that's been waiting forty years.
+The word lands like a key in a lock that's been waiting 40 years.
 
 The Phantom smiles — you feel it more than see it — and the whole vault exhales. Every door you opened swings wide at once. Gold, art, bearer bonds, everything, suddenly yours and meaningless beside the look of relief on a face that isn't there.
 
-*"Thank you,"* he says. And then the chair is empty, and the clocks all stop, and the lights come up clean and white.
+*"Thank you,"* he says. And then the chair is empty, the clocks all stop, and the lights come up clean and white.
 
 You walk out of the Phantom Vault at dawn, pockets full, having stolen the one thing he couldn't keep — and given him back the only thing he wanted.
 
