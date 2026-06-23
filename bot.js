@@ -563,7 +563,8 @@ async function runSetup(guild) {
   await leaderboard.permissionOverwrites.edit(memberRole.id, {
     ViewChannel: true, ReadMessageHistory: true, SendMessages: false, AddReactions: false,
   }).catch(() => {});
-  await refreshLeaderboard(guild);
+  // Non-critical: never let a board-render error abort the whole setup.
+  await refreshLeaderboard(guild).catch(e => console.error('Leaderboard render failed:', e.message));
   messages.push('✅ Leaderboard created');
 
   // 🎫 TICKETS category — admin-only. Per-ticket channels are created here at
@@ -894,8 +895,11 @@ client.on('interactionCreate', async interaction => {
     await handleCommand(interaction);
   } catch (e) {
     console.error(e);
-    // Respond safely whether or not we've already replied/deferred.
-    const msg = { content: '❌ Something went wrong. Please try again.', ephemeral: true };
+    // Surface the real error to admins so setup/teardown failures are
+    // diagnosable; everyone else gets the generic message.
+    const isAdmin = interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator);
+    const detail = isAdmin && e?.message ? `\n\`\`\`${String(e.message).slice(0, 1800)}\`\`\`` : '';
+    const msg = { content: `❌ Something went wrong. Please try again.${detail}`, ephemeral: true };
     try {
       if (interaction.deferred) await interaction.editReply(msg);
       else if (interaction.replied) await interaction.followUp(msg);
