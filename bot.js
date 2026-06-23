@@ -49,6 +49,8 @@ const CONFIG = {
   // ── Tickets ──
   TICKETS_NAME:    'tickets',    // public panel channel (under 📣 COMMUNITY)
   TICKET_CATEGORY: '🎫 TICKETS', // admin-only category where ticket channels land
+  // ── Leaderboard ──
+  LEADERBOARD_NAME: 'leaderboard', // read-only board of who completed which rooms (under 📣 COMMUNITY)
   // ── Roles ──
   MEMBER_ROLE:  'Member',        // granted after accepting the rules; unlocks the server
   BUMPER_ROLE:  'Bumper',        // opt-in: pinged when it's time to bump again
@@ -62,10 +64,10 @@ const CONFIG = {
 
 // Ticket categories. The button customId is `ticket_open_<key>`.
 const TICKET_TYPES = {
-  question: { emoji: '❓', label: 'Vraag',             style: ButtonStyle.Primary   },
-  story:    { emoji: '💡', label: 'Story-idee',        style: ButtonStyle.Success   },
-  level:    { emoji: '🧩', label: 'Level/puzzel-idee', style: ButtonStyle.Secondary },
-  other:    { emoji: '📩', label: 'Anders',            style: ButtonStyle.Secondary },
+  question: { emoji: '❓', label: 'Question',         style: ButtonStyle.Primary   },
+  story:    { emoji: '💡', label: 'Story idea',       style: ButtonStyle.Success   },
+  level:    { emoji: '🧩', label: 'Level/puzzle idea', style: ButtonStyle.Secondary },
+  other:    { emoji: '📩', label: 'Other',            style: ButtonStyle.Secondary },
 };
 
 // ────────────────────────────────────────────────────────────────
@@ -247,15 +249,15 @@ function buildTicketPanelEmbed() {
     .join('\n');
   return new EmbedBuilder()
     .setColor('#5865f2')
-    .setTitle('🎫 Open een ticket')
+    .setTitle('🎫 Open a ticket')
     .setDescription(
-      `Heb je een vraag, een idee voor een nieuwe story of level/puzzel, of wil je om een ` +
-      `andere reden contact met het team? Klik hieronder op de knop die het best past.\n\n` +
-      `Er wordt dan een **privé-kanaal** voor je aangemaakt dat alleen jij en het team kunnen ` +
-      `zien. Beschrijf daar rustig je vraag of idee.\n\n` +
-      `**Categorieën:**\n${lines}\n\n` +
-      `_Je kunt één ticket tegelijk open hebben. Klaar? Gebruik de 🔒-knop in je ticket._`)
-    .setFooter({ text: 'Eén ticket per persoon · het team reageert zo snel mogelijk' });
+      `Have a question, an idea for a new story or level/puzzle, or want to reach the team for ` +
+      `any other reason? Click the button below that fits best.\n\n` +
+      `A **private channel** will be created for you that only you and the team can see. ` +
+      `Describe your question or idea there.\n\n` +
+      `**Categories:**\n${lines}\n\n` +
+      `_You can have one ticket open at a time. Done? Use the 🔒 button inside your ticket._`)
+    .setFooter({ text: 'One ticket per person · the team will reply as soon as possible' });
 }
 
 function buildTicketButtons() {
@@ -269,6 +271,113 @@ function buildTicketButtons() {
         .setStyle(t.style));
   }
   return row;
+}
+
+// ────────────────────────────────────────────────────────────────
+// 🏆  LEADERBOARD
+// A read-only board showing who has completed which rooms. Completion is
+// derived from the per-story winner roles (story-completed), so it needs no
+// extra storage. Rendered as a monospace grid (rows = players ranked by rooms
+// cleared, columns = stories) with a numbered legend, inside a code block so
+// the columns line up. The top player's avatar is shown as the thumbnail.
+// ────────────────────────────────────────────────────────────────
+const RANK_MEDAL = ['🥇', '🥈', '🥉'];
+
+async function buildLeaderboardEmbed(guild) {
+  const stories = allStories();
+
+  // Map each story to its winner role (may be missing if /setup not yet run).
+  const cols = stories.map(s => ({
+    story: s,
+    role: guild.roles.cache.find(r => r.name === makeWinnerRoleName(s.id)) ?? null,
+  }));
+
+  const members = await guild.members.fetch();
+
+  // Build [{ member, done:Set(storyId), count }] for everyone with ≥1 room.
+  const rows = [];
+  for (const [, m] of members) {
+    if (m.user.bot) continue;
+    const done = new Set();
+    for (const c of cols) {
+      if (c.role && m.roles.cache.has(c.role.id)) done.add(c.story.id);
+    }
+    if (done.size > 0) rows.push({ member: m, done, count: done.size });
+  }
+  rows.sort((a, b) =>
+    b.count - a.count ||
+    a.member.displayName.localeCompare(b.member.displayName));
+
+  const embed = new EmbedBuilder()
+    .setColor('#ffd700')
+    .setTitle('🏆 Leaderboard — Completed Rooms')
+    .setTimestamp();
+
+  if (stories.length === 0) {
+    return embed.setDescription('No stories are available yet.');
+  }
+  if (rows.length === 0) {
+    embed.setDescription(
+      'No rooms completed yet — be the first!\n\n' +
+      'Finish every level of a story to earn your spot here.');
+    embed.addFields({
+      name: 'Rooms',
+      value: stories.map((s, i) => `\`${i + 1}\` ${s.emoji} ${s.name}`).join('\n'),
+    });
+    return embed;
+  }
+
+  // Monospace grid — ASCII only so every column lines up (emojis aren't
+  // fixed-width, so they'd break the grid; medals go in the podium line below).
+  // Columns: rank · player name · one 2-char cell per story (legend number in
+  // the header, "X"/"·" in each row).
+  const RANK_W = 3;   // "#  ", "1  ", "12 "
+  const NAME_W = 16;
+  const fitName = (n) => (n.length > NAME_W - 1 ? n.slice(0, NAME_W - 2) + '…' : n).padEnd(NAME_W);
+
+  const header =
+    '#'.padEnd(RANK_W) + 'Player'.padEnd(NAME_W) +
+    stories.map((_, i) => String(i + 1).padStart(2)).join(' ');
+  const sep = '-'.repeat(header.length);
+
+  const lines = [header, sep];
+  const shown = rows.slice(0, 25);
+  shown.forEach((r, idx) => {
+    const rank = String(idx + 1).padEnd(RANK_W);
+    const cells = stories.map(s => (r.done.has(s.id) ? ' X' : ' ·')).join(' ');
+    lines.push(`${rank}${fitName(r.member.displayName)}${cells}`);
+  });
+
+  // Podium line (medals live here, outside the code block, so they don't
+  // disturb the grid alignment).
+  const podium = shown.slice(0, 3)
+    .map((r, i) => `${RANK_MEDAL[i]} **${r.member.displayName}** (${r.count}/${stories.length})`)
+    .join('   ');
+
+  embed.setDescription(
+    (podium ? podium + '\n' : '') +
+    '```\n' + lines.join('\n') + '\n```');
+  embed.addFields({
+    name: 'Rooms',
+    value: stories.map((s, i) => `\`${i + 1}\` ${s.emoji} ${s.name}`).join('\n'),
+  });
+  embed.setFooter({ text: `X = completed · ${rows.length} player(s) on the board` });
+
+  const top = rows[0].member;
+  const avatar = top.displayAvatarURL?.({ size: 128 });
+  if (avatar) embed.setThumbnail(avatar);
+
+  return embed;
+}
+
+// Refresh the leaderboard panel in #leaderboard, if that channel exists.
+// Called after a story is completed and during /setup.
+async function refreshLeaderboard(guild) {
+  const ch = guild.channels.cache.find(
+    c => c.name === CONFIG.LEADERBOARD_NAME && c.type === ChannelType.GuildText);
+  if (!ch) return;
+  const embed = await buildLeaderboardEmbed(guild);
+  await upsertPanel(ch, embed);
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -301,12 +410,12 @@ async function handleDisboardMessage(message) {
     const bumpChannel = guild.channels.cache.find(
       c => c.name === CONFIG.BUMP_NAME && c.type === ChannelType.GuildText);
     if (bumpChannel) {
-      const userMention = bumper ? `<@${bumper.id}>` : 'iemand';
+      const userMention = bumper ? `<@${bumper.id}>` : 'someone';
       await bumpChannel.send({
         embeds: [new EmbedBuilder()
           .setColor('#57f287')
           .setTitle('✅ Thanks for bumping!')
-          .setDescription(`Thanks ${userMention} voor de bump! 💜\nIk ping <@&${CONFIG.BUMPER_ROLE_ID}> over 2 uur.`)],
+          .setDescription(`Thanks ${userMention} for the bump! 💜\nI'll ping <@&${CONFIG.BUMPER_ROLE_ID}> in 2 hours.`)],
       });
     }
   } catch (e) {
@@ -350,13 +459,18 @@ async function runSetup(guild) {
   const messages = ['⚙️ Setup started...'];
   const botRole = guild.members.me?.roles.highest;
 
+  // Create the category, or — if it already exists — re-apply its permission
+  // overwrites so re-running /setup heals any permission drift (this is what
+  // keeps hidden categories like hall-of-fame actually hidden over time).
   async function mkCategory(name, overwrites) {
-    return (
-      guild.channels.cache.find(c => c.name === name && c.type === ChannelType.GuildCategory) ??
-      (await guild.channels.create({
-        name, type: ChannelType.GuildCategory, permissionOverwrites: overwrites, reason: 'Escape Room',
-      }))
-    );
+    const existing = guild.channels.cache.find(c => c.name === name && c.type === ChannelType.GuildCategory);
+    if (existing) {
+      await existing.permissionOverwrites.set(overwrites, 'Escape Room — sync permissions').catch(() => {});
+      return existing;
+    }
+    return guild.channels.create({
+      name, type: ChannelType.GuildCategory, permissionOverwrites: overwrites, reason: 'Escape Room',
+    });
   }
 
   async function mkChannel(name, parent, topic, contentToSend) {
@@ -422,7 +536,7 @@ async function runSetup(guild) {
   // #bump — Disboard reminders. Part of the real server (Member-gated).
   const bumpCat = await mkCategory('📣 COMMUNITY', [
     { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-    { id: memberRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.SendMessages] },
+    { id: memberRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.SendMessages], deny: [PermissionsBitField.Flags.MentionEveryone] },
     ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.AddReactions] }] : []),
   ]);
   const bump = await mkChannel(CONFIG.BUMP_NAME, bumpCat, 'Bump the server on Disboard every 2 hours');
@@ -441,6 +555,16 @@ async function runSetup(guild) {
   }).catch(() => {});
   await upsertPanel(tickets, buildTicketPanelEmbed(), [buildTicketButtons()]);
   messages.push('✅ Tickets panel created');
+
+  // #leaderboard — read-only board of completed rooms (under 📣 COMMUNITY).
+  // Members can view but not type (no SendMessages); the bot maintains one
+  // embed it refreshes on completions and on /setup.
+  const leaderboard = await mkChannel(CONFIG.LEADERBOARD_NAME, bumpCat, 'Who has completed which rooms');
+  await leaderboard.permissionOverwrites.edit(memberRole.id, {
+    ViewChannel: true, ReadMessageHistory: true, SendMessages: false, AddReactions: false,
+  }).catch(() => {});
+  await refreshLeaderboard(guild);
+  messages.push('✅ Leaderboard created');
 
   // 🎫 TICKETS category — admin-only. Per-ticket channels are created here at
   // runtime when a member clicks a panel button. Mirrors the ⚙️ ADMIN overwrites:
@@ -461,6 +585,7 @@ async function runSetup(guild) {
     {
       id: memberRole.id,
       allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.UseApplicationCommands],
+      deny: [PermissionsBitField.Flags.MentionEveryone],
     },
     ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages] }] : []),
   ]);
@@ -512,6 +637,7 @@ async function runSetup(guild) {
         ...(role ? [{
           id: role.id,
           allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.UseApplicationCommands],
+          deny: [PermissionsBitField.Flags.MentionEveryone],
         }] : []),
         ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages] }] : []),
       ]);
@@ -536,11 +662,19 @@ async function runSetup(guild) {
       {
         id: winnerRole.id,
         allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.UseApplicationCommands],
+        deny: [PermissionsBitField.Flags.MentionEveryone],
       },
       ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages] }] : []),
     ]);
     await mkChannel(`${story.id}-winners`, winCat, `Winners of ${story.name}`);
-    await mkChannel(`${story.id}-hall-of-fame`, winCat, `Hall of Fame — ${story.name}`);
+    const hof = await mkChannel(`${story.id}-hall-of-fame`, winCat, `Hall of Fame — ${story.name}`);
+    // Belt-and-braces: give the channel its OWN overwrites so it stays hidden
+    // even if the category's inherited perms ever drift. Read-only for winners.
+    await hof.permissionOverwrites.set([
+      { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+      { id: winnerRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory], deny: [PermissionsBitField.Flags.SendMessages] },
+      ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages] }] : []),
+    ], 'Escape Room — hall of fame visibility').catch(() => {});
 
     messages.push(`✅ ${storyEmoji} ${story.name} — roles & channels created`);
   }
@@ -569,7 +703,8 @@ async function runTeardown(guild) {
   // Top-level category names the bot uses (English + old Dutch).
   const categoryPrefixes = [
     '🎮 ESCAPE ROOM', '⚙️ ADMIN',
-    '👋 START HERE', '📣 COMMUNITY', // entry gate + bump
+    '👋 START HERE', '📣 COMMUNITY', // entry gate + bump + tickets + leaderboard
+    '🎫 TICKETS',               // ticket channels category
     '🏆',                       // "🏆 STORY — COMPLETED" / "🏆 ... — VOLTOOID"
   ];
   // Per-story level categories start with the story emoji + name; we match
@@ -593,6 +728,9 @@ async function runTeardown(guild) {
       name === CONFIG.WELCOME_NAME ||
       name === CONFIG.RULES_NAME ||
       name === CONFIG.BUMP_NAME ||
+      name === CONFIG.LEADERBOARD_NAME ||
+      name === CONFIG.TICKETS_NAME ||
+      /^ticket-/.test(name) ||
       /^answer-/.test(name) ||
       /^antwoord-/.test(name) ||              // old Dutch answer channels
       /-winners$/.test(name) ||
@@ -742,7 +880,7 @@ client.on('interactionCreate', async interaction => {
       await handleButton(interaction);
     } catch (e) {
       console.error(e);
-      const msg = { content: '❌ Er ging iets mis. Probeer het opnieuw.', ephemeral: true };
+      const msg = { content: '❌ Something went wrong. Please try again.', ephemeral: true };
       try {
         if (interaction.deferred) await interaction.editReply(msg);
         else if (interaction.replied) await interaction.followUp(msg);
@@ -787,6 +925,8 @@ function isManagedSilentChannel(ch) {
 
   // ── Channels where ONLY commands are allowed → delete free chat ──
   if (name === CONFIG.HUB_NAME) return true;
+  if (name === CONFIG.BUMP_NAME) return true;             // only /bump; free text removed
+  if (name === CONFIG.LEADERBOARD_NAME) return true;      // bot-only board; no chatting
   if (/^answer-/.test(name)) return true;
   if (parentName.startsWith('🎮 ESCAPE ROOM')) return true;
   if (/ — L\d+$/.test(parentName)) return true;
@@ -908,14 +1048,14 @@ async function handleButton(interaction) {
     const typeKey = customId.slice('ticket_open_'.length);
     const type = TICKET_TYPES[typeKey];
     if (!type) {
-      return interaction.reply({ content: '❌ Onbekende ticketcategorie.', ephemeral: true });
+      return interaction.reply({ content: '❌ Unknown ticket category.', ephemeral: true });
     }
 
     const cat = guild.channels.cache.find(
       c => c.name === CONFIG.TICKET_CATEGORY && c.type === ChannelType.GuildCategory);
     if (!cat) {
       return interaction.reply({
-        content: '❌ Het ticketsysteem is nog niet ingesteld. Vraag een admin om `/setup` te draaien.',
+        content: '❌ The ticket system isn\'t set up yet. Ask an admin to run `/setup`.',
         ephemeral: true,
       });
     }
@@ -925,7 +1065,7 @@ async function handleButton(interaction) {
       c => c.parentId === cat.id && ticketOpenerId(c) === interaction.user.id);
     if (existing) {
       return interaction.reply({
-        content: `❗ Je hebt al een open ticket: ${existing}. Sluit dat eerst voordat je een nieuwe opent.`,
+        content: `❗ You already have an open ticket: ${existing}. Close that one first before opening a new one.`,
         ephemeral: true,
       });
     }
@@ -933,15 +1073,15 @@ async function handleButton(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
     const botRole = guild.members.me?.roles.highest;
-    const safeName = (interaction.user.username || 'lid')
-      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'lid';
+    const safeName = (interaction.user.username || 'member')
+      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'member';
 
     const channel = await guild.channels.create({
       name: `ticket-${safeName}`,
       type: ChannelType.GuildText,
       parent: cat.id,
       topic: `Ticket • ${type.label} • opener:${interaction.user.id}`,
-      reason: `Ticket geopend door ${interaction.user.tag}`,
+      reason: `Ticket opened by ${interaction.user.tag}`,
       permissionOverwrites: [
         { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
         { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
@@ -952,7 +1092,7 @@ async function handleButton(interaction) {
     const closeRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId('ticket_close')
-        .setLabel('Sluit ticket')
+        .setLabel('Close ticket')
         .setEmoji('🔒')
         .setStyle(ButtonStyle.Danger));
 
@@ -960,17 +1100,17 @@ async function handleButton(interaction) {
       content: `${interaction.user}`,
       embeds: [new EmbedBuilder()
         .setColor('#5865f2')
-        .setTitle(`${type.emoji} Nieuw ticket — ${type.label}`)
+        .setTitle(`${type.emoji} New ticket — ${type.label}`)
         .setDescription(
-          `Welkom ${interaction.user}! 👋\n\n` +
-          `Beschrijf hier rustig je **${type.label.toLowerCase()}**. Geef zoveel detail als je kunt — ` +
-          `het team leest mee en reageert zo snel mogelijk.\n\n` +
-          `Klaar of opgelost? Klik op **🔒 Sluit ticket** hieronder.`)],
+          `Welcome ${interaction.user}! 👋\n\n` +
+          `Describe your **${type.label.toLowerCase()}** here. Give as much detail as you can — ` +
+          `the team is reading along and will reply as soon as possible.\n\n` +
+          `Done or resolved? Click **🔒 Close ticket** below.`)],
       components: [closeRow],
     });
 
-    await log(guild, `🎫 **${interaction.user.tag}** opende een ticket (${type.label}) — ${channel}`);
-    return interaction.editReply({ content: `✅ Je ticket is aangemaakt: ${channel}` });
+    await log(guild, `🎫 **${interaction.user.tag}** opened a ticket (${type.label}) — ${channel}`);
+    return interaction.editReply({ content: `✅ Your ticket has been created: ${channel}` });
   }
 
   // ── Close a ticket ─────────────────────────────────────────────
@@ -980,12 +1120,12 @@ async function handleButton(interaction) {
     const isOpener = openerId === interaction.user.id;
     const isAdmin = interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator);
     if (!isOpener && !isAdmin) {
-      return interaction.reply({ content: '❌ Alleen de ticketmaker of een admin kan dit ticket sluiten.', ephemeral: true });
+      return interaction.reply({ content: '❌ Only the ticket opener or an admin can close this ticket.', ephemeral: true });
     }
 
-    await interaction.reply({ content: '🔒 Ticket wordt gesloten… dit kanaal verdwijnt over een paar seconden.' });
-    await log(guild, `🔒 Ticket ${channel?.name} gesloten door **${interaction.user.tag}**`);
-    setTimeout(() => { channel?.delete('Ticket gesloten').catch(() => {}); }, 3000);
+    await interaction.reply({ content: '🔒 Closing ticket… this channel will disappear in a few seconds.' });
+    await log(guild, `🔒 Ticket ${channel?.name} closed by **${interaction.user.tag}**`);
+    setTimeout(() => { channel?.delete('Ticket closed').catch(() => {}); }, 3000);
     return;
   }
 }
@@ -1104,6 +1244,9 @@ async function handleCommand(interaction) {
           .setDescription(`${member} fully completed **${story.name}**!`)
           .setTimestamp()] });
       }
+
+      // New room cleared → update the public leaderboard.
+      await refreshLeaderboard(guild).catch(() => {});
     }
 
     await log(guild, `✅ **${member.user.tag}** completed ${story.name} L${level.id}`);
@@ -1235,6 +1378,7 @@ async function handleCommand(interaction) {
     }
 
     hintCounters.delete(target.id);
+    await refreshLeaderboard(guild).catch(() => {});
     await log(guild, `🔄 **${target.user.tag}** was reset by **${member.user.tag}**`);
     return interaction.reply({ content: `✅ Reset ${target}${storyId ? ` for story \`${storyId}\`` : ' (all stories)'}.`, ephemeral: true });
   }
