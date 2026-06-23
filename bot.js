@@ -23,6 +23,7 @@ const http = require('http');
 const {
   Client, GatewayIntentBits, SlashCommandBuilder, EmbedBuilder,
   PermissionsBitField, REST, Routes, ChannelType, Partials,
+  ButtonBuilder, ButtonStyle, ActionRowBuilder,
 } = require('discord.js');
 require('dotenv').config();
 
@@ -45,6 +46,9 @@ const CONFIG = {
   WELCOME_NAME: 'welcome',       // bot greets new members here
   RULES_NAME:   'rules',         // rules + ✅ reaction to gain access
   BUMP_NAME:    'bump',          // Disboard bump reminders
+  // ── Tickets ──
+  TICKETS_NAME:    'tickets',    // public panel channel (under 📣 COMMUNITY)
+  TICKET_CATEGORY: '🎫 TICKETS', // admin-only category where ticket channels land
   // ── Roles ──
   MEMBER_ROLE:  'Member',        // granted after accepting the rules; unlocks the server
   BUMPER_ROLE:  'Bumper',        // opt-in: pinged when it's time to bump again
@@ -54,6 +58,14 @@ const CONFIG = {
   BUMP_INTERVAL_MS: 2 * 60 * 60 * 1000, // 2 hours
   GATE_CHECK: '✅',              // the reaction emoji used on the rules message
   PORT:       process.env.PORT || 3000,
+};
+
+// Ticket categories. The button customId is `ticket_open_<key>`.
+const TICKET_TYPES = {
+  question: { emoji: '❓', label: 'Vraag',             style: ButtonStyle.Primary   },
+  story:    { emoji: '💡', label: 'Story-idee',        style: ButtonStyle.Success   },
+  level:    { emoji: '🧩', label: 'Level/puzzel-idee', style: ButtonStyle.Secondary },
+  other:    { emoji: '📩', label: 'Anders',            style: ButtonStyle.Secondary },
 };
 
 // ────────────────────────────────────────────────────────────────
@@ -128,6 +140,36 @@ async function getOrCreateRole(guild, name, color) {
   );
 }
 
+// ── Upsert a bot panel/content message ──────────────────────────
+// Lets /setup REFRESH what it posted instead of only posting to empty
+// channels — so editing a story, the hub list, a puzzle, or a panel and
+// re-running /setup updates the message in place (no teardown needed).
+//
+// We locate the existing message by its embed TITLE, so we always edit the
+// right panel and never touch unrelated bot posts in the same channel
+// (e.g. #welcome join-greetings, or #bump "thanks for bumping" embeds).
+// Untitled content embeds (lounge/puzzle/answer) are matched as the single
+// titleless bot embed in their channel.
+async function findBotPanel(channel, title) {
+  const msgs = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+  if (!msgs) return null;
+  // Oldest-first so we edit the original panel, not a later duplicate.
+  const mine = [...msgs.values()].reverse()
+    .filter(m => m.author.id === client.user.id && m.embeds.length);
+  if (title) return mine.find(m => m.embeds[0]?.title === title) ?? null;
+  return mine.find(m => !m.embeds[0]?.title) ?? null;
+}
+
+async function upsertPanel(channel, embed, components) {
+  const payload = { embeds: [embed], ...(components ? { components } : {}) };
+  const existing = await findBotPanel(channel, embed.data?.title ?? null);
+  if (existing) {
+    await existing.edit(payload).catch(() => {});
+    return existing;
+  }
+  return channel.send(payload).catch(() => null);
+}
+
 // Difficulty (1-5) → colour. All 6-digit hex so discord.js never throws.
 const DIFF_COLOR = ['#99aab5', '#57f287', '#3498db', '#9b59b6', '#ffd700'];
 function diffColor(d) { return DIFF_COLOR[Math.min(Math.max(d - 1, 0), DIFF_COLOR.length - 1)]; }
@@ -154,7 +196,7 @@ function buildWelcomeEmbed(guild) {
       `Glad you found us. This is a **co-op escape-room server** — a growing collection of story-driven puzzle rooms you crack with ciphers, riddles and logic.\n\n` +
       `**What's inside, once you're in:**\n` +
       `• 🎮 **#escape-room-hub** — pick a story with \`/startstory\` and play at your own pace\n` +
-      `• 🧩 Multiple stories from 🟢 Easy to 🔴 Hard, each with several levels\n` +
+      `• 🧩 Multiple stories from Easy to Hard, each with several levels\n` +
       `• 💬 **#lounge** — hang out and chat with other players (no spoilers!)\n` +
       `• 🏆 Per-story **winners** channels where finishers can finally talk answers\n` +
       `• 📣 **#bump** — help us grow by bumping the server\n\n` +
@@ -192,6 +234,41 @@ function buildBumpInfoEmbed() {
       `I'll keep track of the cooldown and post here the moment we can bump again.\n\n` +
       `🔔 **Want a reminder ping?** React 🔔 below to grab the **@Bumper** role and I'll tag you when it's time. React again to remove it.`)
     .setFooter({ text: 'Disboard bumps every 2 hours · /bump' });
+}
+
+// ────────────────────────────────────────────────────────────────
+// 🎫  TICKET PANEL
+// A public channel with category buttons. Clicking one opens a private
+// channel (opener + admins only) under the 🎫 TICKETS category.
+// ────────────────────────────────────────────────────────────────
+function buildTicketPanelEmbed() {
+  const lines = Object.values(TICKET_TYPES)
+    .map(t => `${t.emoji} **${t.label}**`)
+    .join('\n');
+  return new EmbedBuilder()
+    .setColor('#5865f2')
+    .setTitle('🎫 Open een ticket')
+    .setDescription(
+      `Heb je een vraag, een idee voor een nieuwe story of level/puzzel, of wil je om een ` +
+      `andere reden contact met het team? Klik hieronder op de knop die het best past.\n\n` +
+      `Er wordt dan een **privé-kanaal** voor je aangemaakt dat alleen jij en het team kunnen ` +
+      `zien. Beschrijf daar rustig je vraag of idee.\n\n` +
+      `**Categorieën:**\n${lines}\n\n` +
+      `_Je kunt één ticket tegelijk open hebben. Klaar? Gebruik de 🔒-knop in je ticket._`)
+    .setFooter({ text: 'Eén ticket per persoon · het team reageert zo snel mogelijk' });
+}
+
+function buildTicketButtons() {
+  const row = new ActionRowBuilder();
+  for (const [key, t] of Object.entries(TICKET_TYPES)) {
+    row.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`ticket_open_${key}`)
+        .setLabel(t.label)
+        .setEmoji(t.emoji)
+        .setStyle(t.style));
+  }
+  return row;
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -290,10 +367,9 @@ async function runSetup(guild) {
       });
     }
     if (contentToSend) {
-      const msgs = await ch.messages.fetch({ limit: 1 });
-      if (msgs.size === 0) {
-        await ch.send({ embeds: [new EmbedBuilder().setColor('#2b2d31').setDescription(contentToSend)] });
-      }
+      // Upsert the content embed so editing a story/level and re-running
+      // /setup refreshes the text in place instead of leaving the old copy.
+      await upsertPanel(ch, new EmbedBuilder().setColor('#2b2d31').setDescription(contentToSend));
     }
     return ch;
   }
@@ -319,22 +395,17 @@ async function runSetup(guild) {
     ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.AddReactions] }] : []),
   ]);
 
-  // #welcome — bot greeting. Read-only for everyone.
+  // #welcome — bot greeting. Read-only for everyone. Upserted so edits to the
+  // welcome embed refresh on the next /setup. (The per-member join greetings
+  // have no embed title match, so they're never touched.)
   const welcome = await mkChannel(CONFIG.WELCOME_NAME, gateCat, 'Welcome! Start here.');
-  const welcomeMsgs = await welcome.messages.fetch({ limit: 5 });
-  if (welcomeMsgs.size === 0) {
-    await welcome.send({ embeds: [buildWelcomeEmbed(guild)] });
-  }
+  await upsertPanel(welcome, buildWelcomeEmbed(guild));
 
-  // #rules — rules embed + ✅ reaction gate.
+  // #rules — rules embed + ✅ reaction gate. Upserted so rule edits refresh.
   const rules = await mkChannel(CONFIG.RULES_NAME, gateCat, 'Read and accept the rules to enter');
-  const rulesMsgs = await rules.messages.fetch({ limit: 5 });
-  let rulesMsg = rulesMsgs.find(m => m.author.id === client.user.id && m.embeds.length);
-  if (!rulesMsg) {
-    rulesMsg = await rules.send({ embeds: [buildRulesEmbed()] });
-  }
+  const rulesMsg = await upsertPanel(rules, buildRulesEmbed());
   // Make sure our ✅ is on it so members have something to click.
-  await rulesMsg.react(CONFIG.GATE_CHECK).catch(() => {});
+  if (rulesMsg) await rulesMsg.react(CONFIG.GATE_CHECK).catch(() => {});
   messages.push('✅ Welcome & Rules gate created');
 
   // Backfill: every CURRENT human member keeps access (new joiners don't).
@@ -355,13 +426,30 @@ async function runSetup(guild) {
     ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.AddReactions] }] : []),
   ]);
   const bump = await mkChannel(CONFIG.BUMP_NAME, bumpCat, 'Bump the server on Disboard every 2 hours');
-  const bumpMsgs = await bump.messages.fetch({ limit: 5 });
-  let bumpOptIn = bumpMsgs.find(m => m.author.id === client.user.id && m.embeds.length);
-  if (!bumpOptIn) {
-    bumpOptIn = await bump.send({ embeds: [buildBumpInfoEmbed()] });
-  }
-  await bumpOptIn.react('🔔').catch(() => {});
+  // Matched by the info embed's title, so bump-confirmation/reminder posts in
+  // the same channel are never edited.
+  const bumpOptIn = await upsertPanel(bump, buildBumpInfoEmbed());
+  if (bumpOptIn) await bumpOptIn.react('🔔').catch(() => {});
   messages.push('✅ Bump channel created');
+
+  // #tickets — the public panel. Members open tickets via buttons, so we deny
+  // SendMessages for members here (button clicks are interactions, not messages)
+  // to keep the panel channel clean. The bot may still post the panel.
+  const tickets = await mkChannel(CONFIG.TICKETS_NAME, bumpCat, 'Open a ticket for questions or ideas');
+  await tickets.permissionOverwrites.edit(memberRole.id, {
+    ViewChannel: true, ReadMessageHistory: true, SendMessages: false,
+  }).catch(() => {});
+  await upsertPanel(tickets, buildTicketPanelEmbed(), [buildTicketButtons()]);
+  messages.push('✅ Tickets panel created');
+
+  // 🎫 TICKETS category — admin-only. Per-ticket channels are created here at
+  // runtime when a member clicks a panel button. Mirrors the ⚙️ ADMIN overwrites:
+  // hidden from @everyone; admins see it via the Administrator permission.
+  await mkCategory(CONFIG.TICKET_CATEGORY, [
+    { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+    ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.ManageChannels] }] : []),
+  ]);
+  messages.push('✅ Tickets category created');
 
   // 1. Public hub category — now gated behind the Member role.
   //    NOTE: Discord requires BOTH SendMessages AND UseApplicationCommands for
@@ -378,21 +466,19 @@ async function runSetup(guild) {
   ]);
 
   const hub = await mkChannel(CONFIG.HUB_NAME, hubCat, 'Pick a story and start your adventure');
-  const hubMsgs = await hub.messages.fetch({ limit: 1 });
-  if (hubMsgs.size === 0) {
-    const stories = allStories();
-    const embed = new EmbedBuilder()
-      .setColor('#2b2d31')
-      .setTitle('🎮 Escape Room — Choose your adventure')
-      .setDescription(
-        'Welcome. Several stories are waiting for you.\n\n' +
-        'Use `/startstory` to begin. You can play multiple stories at once.\n\n' +
-        stories
-          .map(s => `${s.emoji} **${s.name}** — ${s.levels.length} levels · ${diffBadge(s)}\n*${s.description}*`)
-          .join('\n\n'))
-      .setFooter({ text: '/startstory · /answer · /hint · /myprogress' });
-    await hub.send({ embeds: [embed] });
-  }
+  // Rebuilt and upserted every run, so adding/renaming a story refreshes the
+  // hub list in place on the next /setup.
+  const hubEmbed = new EmbedBuilder()
+    .setColor('#2b2d31')
+    .setTitle('🎮 Escape Room — Choose your adventure')
+    .setDescription(
+      'Welcome. Several stories are waiting for you.\n\n' +
+      'Use `/startstory` to begin. You can play multiple stories at once.\n\n' +
+      allStories()
+        .map(s => `${s.emoji} **${s.name}** — ${s.levels.length} levels`)
+        .join('\n\n'))
+    .setFooter({ text: '/startstory · /answer · /hint · /myprogress' });
+  await upsertPanel(hub, hubEmbed);
   messages.push('✅ Hub created');
 
   // Lounge — the ONE public channel where players may freely chat.
@@ -651,6 +737,20 @@ client.once('clientReady', async () => {
 });
 
 client.on('interactionCreate', async interaction => {
+  if (interaction.isButton()) {
+    try {
+      await handleButton(interaction);
+    } catch (e) {
+      console.error(e);
+      const msg = { content: '❌ Er ging iets mis. Probeer het opnieuw.', ephemeral: true };
+      try {
+        if (interaction.deferred) await interaction.editReply(msg);
+        else if (interaction.replied) await interaction.followUp(msg);
+        else await interaction.reply(msg);
+      } catch (_) { /* interaction expired */ }
+    }
+    return;
+  }
   if (!interaction.isChatInputCommand()) return;
   try {
     await handleCommand(interaction);
@@ -786,6 +886,109 @@ async function handleGateReaction(reaction, user, added) {
 
 // Never let an unhandled rejection kill the process.
 process.on('unhandledRejection', err => console.error('Unhandled rejection:', err));
+
+// ────────────────────────────────────────────────────────────────
+// 🎫  TICKET BUTTON HANDLERS
+// ────────────────────────────────────────────────────────────────
+// We stash the opener's id in the channel topic ("opener:<id>") so the
+// 1-ticket limit and the close-permission check survive bot restarts with
+// no extra state — same "derive everything from Discord" approach the rest
+// of the bot uses.
+function ticketOpenerId(channel) {
+  const m = /opener:(\d+)/.exec(channel?.topic ?? '');
+  return m ? m[1] : null;
+}
+
+async function handleButton(interaction) {
+  const { customId, guild } = interaction;
+  if (!guild) return;
+
+  // ── Open a ticket ──────────────────────────────────────────────
+  if (customId.startsWith('ticket_open_')) {
+    const typeKey = customId.slice('ticket_open_'.length);
+    const type = TICKET_TYPES[typeKey];
+    if (!type) {
+      return interaction.reply({ content: '❌ Onbekende ticketcategorie.', ephemeral: true });
+    }
+
+    const cat = guild.channels.cache.find(
+      c => c.name === CONFIG.TICKET_CATEGORY && c.type === ChannelType.GuildCategory);
+    if (!cat) {
+      return interaction.reply({
+        content: '❌ Het ticketsysteem is nog niet ingesteld. Vraag een admin om `/setup` te draaien.',
+        ephemeral: true,
+      });
+    }
+
+    // Enforce one open ticket per member.
+    const existing = guild.channels.cache.find(
+      c => c.parentId === cat.id && ticketOpenerId(c) === interaction.user.id);
+    if (existing) {
+      return interaction.reply({
+        content: `❗ Je hebt al een open ticket: ${existing}. Sluit dat eerst voordat je een nieuwe opent.`,
+        ephemeral: true,
+      });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    const botRole = guild.members.me?.roles.highest;
+    const safeName = (interaction.user.username || 'lid')
+      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'lid';
+
+    const channel = await guild.channels.create({
+      name: `ticket-${safeName}`,
+      type: ChannelType.GuildText,
+      parent: cat.id,
+      topic: `Ticket • ${type.label} • opener:${interaction.user.id}`,
+      reason: `Ticket geopend door ${interaction.user.tag}`,
+      permissionOverwrites: [
+        { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+        { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
+        ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.ManageChannels] }] : []),
+      ],
+    });
+
+    const closeRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('ticket_close')
+        .setLabel('Sluit ticket')
+        .setEmoji('🔒')
+        .setStyle(ButtonStyle.Danger));
+
+    await channel.send({
+      content: `${interaction.user}`,
+      embeds: [new EmbedBuilder()
+        .setColor('#5865f2')
+        .setTitle(`${type.emoji} Nieuw ticket — ${type.label}`)
+        .setDescription(
+          `Welkom ${interaction.user}! 👋\n\n` +
+          `Beschrijf hier rustig je **${type.label.toLowerCase()}**. Geef zoveel detail als je kunt — ` +
+          `het team leest mee en reageert zo snel mogelijk.\n\n` +
+          `Klaar of opgelost? Klik op **🔒 Sluit ticket** hieronder.`)],
+      components: [closeRow],
+    });
+
+    await log(guild, `🎫 **${interaction.user.tag}** opende een ticket (${type.label}) — ${channel}`);
+    return interaction.editReply({ content: `✅ Je ticket is aangemaakt: ${channel}` });
+  }
+
+  // ── Close a ticket ─────────────────────────────────────────────
+  if (customId === 'ticket_close') {
+    const channel = interaction.channel;
+    const openerId = ticketOpenerId(channel);
+    const isOpener = openerId === interaction.user.id;
+    const isAdmin = interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator);
+    if (!isOpener && !isAdmin) {
+      return interaction.reply({ content: '❌ Alleen de ticketmaker of een admin kan dit ticket sluiten.', ephemeral: true });
+    }
+
+    await interaction.reply({ content: '🔒 Ticket wordt gesloten… dit kanaal verdwijnt over een paar seconden.' });
+    await log(guild, `🔒 Ticket ${channel?.name} gesloten door **${interaction.user.tag}**`);
+    setTimeout(() => { channel?.delete('Ticket gesloten').catch(() => {}); }, 3000);
+    return;
+  }
+}
 
 // ────────────────────────────────────────────────────────────────
 // 💬  COMMAND HANDLERS
