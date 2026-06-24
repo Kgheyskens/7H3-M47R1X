@@ -166,10 +166,16 @@ async function upsertPanel(channel, embed, components) {
   const payload = { embeds: [embed], ...(components ? { components } : {}) };
   const existing = await findBotPanel(channel, embed.data?.title ?? null);
   if (existing) {
-    await existing.edit(payload).catch(() => {});
-    return existing;
+    const edited = await existing.edit(payload).catch(e => {
+      console.error(`upsertPanel edit failed in #${channel?.name}: ${e.message}`);
+      return null;
+    });
+    return edited ?? existing;
   }
-  return channel.send(payload).catch(() => null);
+  return channel.send(payload).catch(e => {
+    console.error(`upsertPanel send failed in #${channel?.name}: ${e.message}`);
+    return null;
+  });
 }
 
 // Difficulty (1-5) → colour. All 6-digit hex so discord.js never throws.
@@ -375,9 +381,10 @@ async function buildLeaderboardEmbed(guild) {
 async function refreshLeaderboard(guild) {
   const ch = guild.channels.cache.find(
     c => c.name === CONFIG.LEADERBOARD_NAME && c.type === ChannelType.GuildText);
-  if (!ch) return;
+  if (!ch) throw new Error(`#${CONFIG.LEADERBOARD_NAME} channel not found`);
   const embed = await buildLeaderboardEmbed(guild);
-  await upsertPanel(ch, embed);
+  const posted = await upsertPanel(ch, embed);
+  if (!posted) throw new Error(`could not post in #${ch.name} (check bot's Send Messages / View Channel perms there)`);
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -537,7 +544,7 @@ async function runSetup(guild) {
   const bumpCat = await mkCategory('📣 COMMUNITY', [
     { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
     { id: memberRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.SendMessages], deny: [PermissionsBitField.Flags.MentionEveryone] },
-    ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.AddReactions] }] : []),
+    ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages, PermissionsBitField.Flags.AddReactions] }] : []),
   ]);
   const bump = await mkChannel(CONFIG.BUMP_NAME, bumpCat, 'Bump the server on Disboard every 2 hours');
   // Matched by the info embed's title, so bump-confirmation/reminder posts in
@@ -563,9 +570,15 @@ async function runSetup(guild) {
   await leaderboard.permissionOverwrites.edit(memberRole.id, {
     ViewChannel: true, ReadMessageHistory: true, SendMessages: false, AddReactions: false,
   }).catch(() => {});
-  // Non-critical: never let a board-render error abort the whole setup.
-  await refreshLeaderboard(guild).catch(e => console.error('Leaderboard render failed:', e.message));
-  messages.push('✅ Leaderboard created');
+  // Non-critical: never let a board-render error abort the whole setup, but
+  // surface it in the reply so it's diagnosable.
+  try {
+    await refreshLeaderboard(guild);
+    messages.push('✅ Leaderboard created');
+  } catch (e) {
+    console.error('Leaderboard render failed:', e);
+    messages.push(`⚠️ Leaderboard channel created, but the board failed to post: ${e.message}`);
+  }
 
   // 🎫 TICKETS category — admin-only. Per-ticket channels are created here at
   // runtime when a member clicks a panel button. Mirrors the ⚙️ ADMIN overwrites:
