@@ -193,6 +193,13 @@ function diffBadge(story) {
   return `${dot} ${label}`;
 }
 
+// Leaderboard difficulty weight: harder rooms are worth more, so a player who
+// cleared a Hard room outranks one who cleared an Easy room at the same count.
+const DIFF_WEIGHT = { easy: 1, medium: 2, hard: 3, 'very hard': 4 };
+function diffWeight(story) {
+  return DIFF_WEIGHT[(story.difficultyLabel ?? 'Medium').toLowerCase()] ?? 2;
+}
+
 // ────────────────────────────────────────────────────────────────
 // 📜  GATE EMBEDS (welcome / rules / bump)
 // ────────────────────────────────────────────────────────────────
@@ -289,6 +296,33 @@ function buildTicketButtons() {
 // ────────────────────────────────────────────────────────────────
 const RANK_MEDAL = ['🥇', '🥈', '🥉'];
 
+// Read completion timestamps from the per-story hall-of-fame channels. Each
+// "🏆 Hall of Fame" post is created the moment a player finishes a story and
+// mentions that player, so the message's createdTimestamp IS the completion
+// time — no extra storage needed. Returns Map<userId, Map<storyId, ts>>.
+// These are REST message fetches (not the rate-limited member-fetch gateway op).
+async function collectCompletionTimes(guild, stories) {
+  const times = new Map();
+  for (const s of stories) {
+    const hof = guild.channels.cache.find(c => c.name === `${s.id}-hall-of-fame`);
+    if (!hof) continue;
+    const msgs = await hof.messages.fetch({ limit: 100 }).catch(() => null);
+    if (!msgs) continue;
+    for (const [, m] of msgs) {
+      if (m.author.id !== client.user.id) continue;
+      if (m.embeds[0]?.title !== '🏆 Hall of Fame') continue;
+      const uid = m.mentions?.users?.first()?.id;
+      if (!uid) continue;
+      let perUser = times.get(uid);
+      if (!perUser) { perUser = new Map(); times.set(uid, perUser); }
+      // Keep the earliest post for this story (in case of duplicates).
+      const prev = perUser.get(s.id);
+      if (prev === undefined || m.createdTimestamp < prev) perUser.set(s.id, m.createdTimestamp);
+    }
+  }
+  return times;
+}
+
 async function buildLeaderboardEmbed(guild) {
   const stories = allStories();
 
@@ -313,9 +347,40 @@ async function buildLeaderboardEmbed(guild) {
     }
   }
 
-  const rows = [...byUser.values()].map(e => ({ ...e, count: e.done.size }));
+  // Completion times for the tiebreak. The time a player "reached their current
+  // room count" is the timestamp of their most-recent completion; earliest wins.
+  const times = await collectCompletionTimes(guild, stories);
+  const reachedAt = (userId, done) => {
+    const perUser = times.get(userId);
+    if (!perUser) return Infinity; // no timestamp known → rank after timed players
+    let latest = -Infinity;
+    for (const sid of done) {
+      const t = perUser.get(sid);
+      if (t === undefined) return Infinity; // a completion with no record → unknown
+      if (t > latest) latest = t;
+    }
+    return latest === -Infinity ? Infinity : latest;
+  };
+
+  // Sum of difficulty weights across a player's completed rooms — the
+  // secondary rank key, so harder rooms outrank easier ones at the same count.
+  const weightById = new Map(stories.map(s => [s.id, diffWeight(s)]));
+  const diffScore = (done) => {
+    let sum = 0;
+    for (const sid of done) sum += weightById.get(sid) ?? 0;
+    return sum;
+  };
+
+  const rows = [...byUser.values()].map(e => ({
+    ...e,
+    count: e.done.size,
+    diff: diffScore(e.done),
+    reachedAt: reachedAt(e.member.id, e.done),
+  }));
   rows.sort((a, b) =>
-    b.count - a.count ||
+    b.count - a.count ||           // 1. most rooms cleared
+    b.diff - a.diff ||             // 2. harder rooms rank higher (sum of difficulty)
+    a.reachedAt - b.reachedAt ||   // 3. tie → whoever got there earliest
     a.member.displayName.localeCompare(b.member.displayName));
 
   const embed = new EmbedBuilder()
@@ -682,16 +747,18 @@ async function runSetup(guild) {
         allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.UseApplicationCommands],
         deny: [PermissionsBitField.Flags.MentionEveryone],
       },
-      ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages] }] : []),
+      ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages] }] : []),
     ]);
     await mkChannel(`${story.id}-winners`, winCat, `Winners of ${story.name}`);
     const hof = await mkChannel(`${story.id}-hall-of-fame`, winCat, `Hall of Fame — ${story.name}`);
     // Belt-and-braces: give the channel its OWN overwrites so it stays hidden
     // even if the category's inherited perms ever drift. Read-only for winners.
+    // The bot needs ReadMessageHistory here so the leaderboard can read these
+    // posts' timestamps for the completion-time tiebreak.
     await hof.permissionOverwrites.set([
       { id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
       { id: winnerRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory], deny: [PermissionsBitField.Flags.SendMessages] },
-      ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages] }] : []),
+      ...(botRole ? [{ id: botRole.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages] }] : []),
     ], 'Escape Room — hall of fame visibility').catch(() => {});
 
     messages.push(`✅ ${storyEmoji} ${story.name} — roles & channels created`);
