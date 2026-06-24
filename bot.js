@@ -311,7 +311,11 @@ async function collectCompletionTimes(guild, stories) {
     for (const [, m] of msgs) {
       if (m.author.id !== client.user.id) continue;
       if (m.embeds[0]?.title !== '🏆 Hall of Fame') continue;
-      const uid = m.mentions?.users?.first()?.id;
+      // The mention lives in the embed DESCRIPTION ("<@id> fully completed…"),
+      // not the message content — so m.mentions.users is empty here. Parse the
+      // id out of the description text instead.
+      const uid = m.mentions?.users?.first()?.id
+        ?? (m.embeds[0]?.description?.match(/<@!?(\d+)>/)?.[1]);
       if (!uid) continue;
       let perUser = times.get(uid);
       if (!perUser) { perUser = new Map(); times.set(uid, perUser); }
