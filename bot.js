@@ -298,18 +298,22 @@ async function buildLeaderboardEmbed(guild) {
     role: guild.roles.cache.find(r => r.name === makeWinnerRoleName(s.id)) ?? null,
   }));
 
-  const members = await guild.members.fetch();
-
-  // Build [{ member, done:Set(storyId), count }] for everyone with ≥1 room.
-  const rows = [];
-  for (const [, m] of members) {
-    if (m.user.bot) continue;
-    const done = new Set();
-    for (const c of cols) {
-      if (c.role && m.roles.cache.has(c.role.id)) done.add(c.story.id);
+  // Derive the board from each winner role's cached members — NOT a fresh
+  // guild.members.fetch(). That gateway call (opcode 8) is heavily rate-limited
+  // and /setup already fetches the full member list once, so a second fetch
+  // here would trip the limit and the board would fail to post.
+  const byUser = new Map(); // userId -> { member, done:Set(storyId) }
+  for (const c of cols) {
+    if (!c.role) continue;
+    for (const [, m] of c.role.members) {
+      if (m.user.bot) continue;
+      let entry = byUser.get(m.id);
+      if (!entry) { entry = { member: m, done: new Set() }; byUser.set(m.id, entry); }
+      entry.done.add(c.story.id);
     }
-    if (done.size > 0) rows.push({ member: m, done, count: done.size });
   }
+
+  const rows = [...byUser.values()].map(e => ({ ...e, count: e.done.size }));
   rows.sort((a, b) =>
     b.count - a.count ||
     a.member.displayName.localeCompare(b.member.displayName));
