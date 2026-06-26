@@ -478,7 +478,10 @@ function isDisboardBumpSuccess(message) {
 }
 
 function getBumper(message) {
-  return message.interaction?.user ?? message.author ?? null;
+  // The user who ran /bump. interactionMetadata is the modern field
+  // (discord.js ≥14.17); interaction is the deprecated fallback. We do NOT
+  // fall back to message.author — that's Disboard itself, not the bumper.
+  return message.interactionMetadata?.user ?? message.interaction?.user ?? null;
 }
 
 async function handleDisboardMessage(message) {
@@ -490,12 +493,19 @@ async function handleDisboardMessage(message) {
     const bumpChannel = guild.channels.cache.find(
       c => c.name === CONFIG.BUMP_NAME && c.type === ChannelType.GuildText);
     if (bumpChannel) {
-      const userMention = bumper ? `<@${bumper.id}>` : 'someone';
+      // The thank-you mention MUST live in message content, not the embed —
+      // Discord only sends a ping for mentions in content. allowedMentions
+      // explicitly whitelists the user so the ping always lands.
+      const content = bumper
+        ? `Thanks <@${bumper.id}> for the bump! 💜`
+        : 'Thanks for the bump! 💜';
       await bumpChannel.send({
+        content,
+        allowedMentions: bumper ? { users: [bumper.id] } : { parse: [] },
         embeds: [new EmbedBuilder()
           .setColor('#57f287')
           .setTitle('✅ Thanks for bumping!')
-          .setDescription(`Thanks ${userMention} for the bump! 💜\nI'll ping <@&${CONFIG.BUMPER_ROLE_ID}> in 2 hours.`)],
+          .setDescription(`I'll ping <@&${CONFIG.BUMPER_ROLE_ID}> in 2 hours when it's time to bump again.`)],
       });
     }
   } catch (e) {
@@ -518,11 +528,14 @@ function scheduleBumpReminder(guild, delayMs) {
       if (!bump) return;
       await bump.send({
         content: `<@&${CONFIG.BUMPER_ROLE_ID}>`,
+        // Whitelist the role so the ping fires even though the role isn't
+        // "mentionable" in its settings (the bot has MentionEveryone here).
+        allowedMentions: { roles: [CONFIG.BUMPER_ROLE_ID] },
         embeds: [new EmbedBuilder()
           .setColor('#eb459e')
           .setTitle('⏰ Time to bump again!')
           .setDescription('The 2-hour cooldown is up. Run `/bump` here to push us back to the top of Disboard. Thank you! 💜')],
-      }).catch(() => {});
+      }).catch(e => console.error('Bump reminder send failed:', e.message));
     } catch (e) {
       console.error('Bump reminder error:', e.message);
     }
@@ -530,6 +543,54 @@ function scheduleBumpReminder(guild, delayMs) {
 
   if (timer.unref) timer.unref();
   bumpTimers.set(guild.id, timer);
+}
+
+// On startup, rebuild the reminder from #bump history. The reminder is an
+// in-memory setTimeout, so a restart/redeploy (common on Render's free tier)
+// wipes it — which is why the 2-hour ping sometimes never fired. We find the
+// most recent Disboard success and either schedule the remaining time, or fire
+// right away if 2h already elapsed while the bot was offline.
+async function recoverBumpReminder(guild) {
+  try {
+    const bump = guild.channels.cache.find(
+      c => c.name === CONFIG.BUMP_NAME && c.type === ChannelType.GuildText);
+    if (!bump) return;
+
+    const msgs = await bump.messages.fetch({ limit: 50 }).catch(() => null);
+    if (!msgs) return;
+
+    // Most recent confirmed Disboard bump, and the most recent reminder we
+    // posted (embed title "⏰ Time to bump again!").
+    let last = null;
+    let lastReminder = null;
+    for (const [, m] of msgs) {
+      if (m.author.id === CONFIG.DISBOARD_ID && isDisboardBumpSuccess(m)) {
+        if (!last || m.createdTimestamp > last.createdTimestamp) last = m;
+      }
+      if (m.author.id === client.user.id && m.embeds[0]?.title === '⏰ Time to bump again!') {
+        if (!lastReminder || m.createdTimestamp > lastReminder.createdTimestamp) lastReminder = m;
+      }
+    }
+    if (!last) return;
+
+    const elapsed = Date.now() - last.createdTimestamp;
+    const remaining = CONFIG.BUMP_INTERVAL_MS - elapsed;
+    if (remaining <= 0) {
+      // Cooldown already passed while offline. Only remind now if we haven't
+      // already posted a reminder since the last bump — otherwise a restart
+      // would re-ping @Bumper every time.
+      if (lastReminder && lastReminder.createdTimestamp > last.createdTimestamp) {
+        console.log(`⏰ Bump reminder for ${guild.name}: already reminded since last bump, skipping`);
+        return;
+      }
+      scheduleBumpReminder(guild, 5000);
+    } else {
+      scheduleBumpReminder(guild, remaining);
+    }
+    console.log(`⏰ Bump reminder recovered for ${guild.name}: ${Math.round(Math.max(remaining, 0) / 60000)} min left`);
+  } catch (e) {
+    console.error('Bump recovery error:', e.message);
+  }
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -961,6 +1022,10 @@ async function registerCommands() {
 client.once('clientReady', async () => {
   console.log(`✅ Bot online: ${client.user.tag}`);
   await registerCommands();
+  // Restore any pending bump reminder that an offline period would have wiped.
+  for (const [, guild] of client.guilds.cache) {
+    await recoverBumpReminder(guild);
+  }
 });
 
 client.on('interactionCreate', async interaction => {
