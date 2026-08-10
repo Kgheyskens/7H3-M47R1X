@@ -1,174 +1,170 @@
-# 🎙️ Escape Room Bot — Multi-Story Edition
+# Fortnite Tournament Bot
 
-A Discord bot that runs text-based escape room stories. Each story is a series of
-levels; solving a level unlocks the next set of channels. Players can play several
-stories at once, and the whole server (channels + roles) is built for you by a single
-`/setup` command.
-
----
-
-## 📁 Project structure
-
-```
-bot.js                       ← the bot (commands, setup, keepalive server)
-data/
-  index.js                   ← auto-loads every story file
-  stories/
-    _TEMPLATE.js             ← copy this to make a new story (ignored by the loader)
-    forgotten-frequency.js   ← Story 1 (10 levels)
-    hollow-lighthouse.js     ← Story 2 (5 levels)
-.env.example                 ← which secrets you need
-package.json
-```
-
-**Key idea:** to add a story you just drop a new `.js` file in `data/stories/`.
-The bot finds it automatically on startup. Files starting with `_` are ignored
-(so the template never loads as a real story).
+A Discord bot for running Fortnite custom-lobby tournaments: players register with their
+Epic name and region, admins post the creator code per region, and match results are
+verified from a screenshot by AI before a human confirms them on a web dashboard.
 
 ---
 
-## 🚀 First-time setup
+## How a tournament runs
 
-### 1. Create the Discord application
-1. Go to <https://discord.com/developers/applications> → **New Application**.
-2. **Bot** tab → **Add Bot** → copy the **Token** (this is `BOT_TOKEN`).
-3. **Bot** tab → enable these **Privileged Gateway Intents**:
-   - ✅ Server Members Intent
-   - ✅ Message Content Intent
-4. **OAuth2 → URL Generator**: scopes `bot` + `applications.commands`,
-   bot permissions: **Administrator** (simplest — it creates roles/channels).
-   Open the generated URL and invite the bot to your server.
-5. **General Information** tab → copy the **Application ID** (this is `CLIENT_ID`).
-6. In Discord, enable Developer Mode (User Settings → Advanced), right-click your
-   server icon → **Copy Server ID** (this is `GUILD_ID`).
+1. **Setup** — an administrator runs `/setup`. Until that wizard is finished, `/setup` is
+   the *only* command the server has. Finishing it deploys every other command.
+2. **Teams** — the wizard creates team roles (or links existing ones). Members join a team
+   from a button panel; their points count for that team.
+3. **Create** — `/tournament create name:"Summer Cup" regions:"EU, NAE, NAW"`.
+4. **Open** — `/tournament status status:Open` announces registration.
+5. **Register** — players run `/tournament join` with their exact Epic name and region.
+6. **Play** — `/tournament code region:EU code:ABC-123` posts the creator code and pings
+   everyone registered in that region.
+7. **Submit** — after the match, players run `/submit` with their kills, whether they won,
+   and their end-of-match screenshot. Staff can also submit for someone with `/admin-submit`.
+8. **Review** — the AI reads the kills, the win banner and the Epic name from the image.
+   Nothing scores until a human approves it on the dashboard or with `/review approve`.
+9. **Standings** — `/leaderboard post` puts self-updating team and player boards in a
+   channel. They refresh every minute and after every review.
 
-### 2. Environment variables
-Copy `.env.example` to `.env` and fill it in:
+---
 
-```
-BOT_TOKEN=your_bot_token_here
-CLIENT_ID=your_application_id_here
-GUILD_ID=your_server_id_here
-```
+## Commands
 
-> ⚠️ On Render you do **not** create a `.env` file — you add these as
-> **Environment Variables** in the dashboard instead (see below).
+| Command | Who | What it does |
+|---|---|---|
+| `/setup` | Admin | The configuration wizard. Re-run it any time to change settings. |
+| `/tournament create\|status\|code\|players` | Admin | Manage tournaments, regions and creator codes. |
+| `/tournament join\|info\|list` | Everyone | Register and view tournaments. |
+| `/team panel\|assign\|reset` | Admin | Post the join panel, move or reset members. |
+| `/team list\|status` | Everyone | View teams and who is on them. |
+| `/submit` | Everyone | Submit your own match result. |
+| `/admin-submit` | Staff | Submit a result on behalf of a player. |
+| `/review queue\|show\|approve\|reject\|remove\|logs\|dashboard` | Admin | Review submissions from Discord. |
+| `/leaderboard teams\|players` | Everyone | View the standings. |
+| `/leaderboard post` | Admin | Post the self-updating boards. |
 
-### 3. Run locally
+---
+
+## Web dashboard
+
+Reachable at `/admin` on your bot's public URL. Sign in with `ADMIN_DASHBOARD_TOKEN`.
+
+Tabs:
+
+- **Pending** — everything awaiting a decision.
+- **AI corrected** — submissions where a human overruled what the AI read. This is the
+  accuracy audit trail.
+- **Approved** / **Rejected** / **All**.
+
+Each card shows the screenshot, the AI's verdict and confidence, and warnings when the AI
+disagrees with the player or the Epic name on the screenshot does not match the registered
+one. Kill count and win flag are pre-filled from the AI's reading and can be corrected
+before approving.
+
+Sessions are random ids stored server-side with a 12-hour expiry, and login is locked for
+15 minutes after 5 failed attempts.
+
+---
+
+## Setup
+
+### 1. Discord application
+
+1. <https://discord.com/developers/applications> → **New Application**.
+2. **Bot** → copy the token (`DISCORD_TOKEN`), enable the **Server Members Intent**.
+3. **General Information** → copy the Application ID (`DISCORD_CLIENT_ID`).
+4. **OAuth2 → URL Generator**: scopes `bot` + `applications.commands`; permissions
+   **Manage Roles**, **Manage Channels**, **Send Messages**, **Embed Links**,
+   **Attach Files**, **Read Message History**. Invite the bot.
+5. Move the bot's role **above** every team role, or it cannot assign them.
+
+### 2. Database
+
+Any PostgreSQL instance works (Neon, Supabase, Render, local). Put the connection string in
+`DATABASE_URL`. The schema is created automatically on first use — there is nothing to run
+by hand. For a local Postgres without TLS, set `DATABASE_SSL=false`.
+
+### 3. Environment
+
+Copy `.env.example` to `.env` and fill it in. See the table below.
+
+### 4. Run
+
 ```bash
 npm install
 npm start
 ```
-Then in your Discord server run **`/setup`** (as an admin) to build all channels and roles.
 
 ---
 
-## ☁️ Hosting on Render + UptimeRobot (keep it always online)
+## Environment variables
 
-### Why your bot kept going offline
-Render **Web Services** require the app to open a network port. A plain Discord bot
-doesn't open one, so Render logged *"No open ports detected"* and eventually killed it.
-This bot now starts a tiny HTTP server (see `bot.js`, the "KEEPALIVE WEB SERVER" block)
-that listens on `process.env.PORT`. That:
-1. makes Render happy (a port is open), and
-2. gives UptimeRobot a URL to ping so the free instance never sleeps.
-
-### Render configuration
-- **Type:** Web Service
-- **Build Command:** `npm install`
-- **Start Command:** `node bot.js`
-- **Environment Variables:** add `BOT_TOKEN`, `CLIENT_ID`, `GUILD_ID`
-  (Render sets `PORT` automatically — don't add it yourself.)
-
-After it deploys, open your service URL (e.g. `https://your-app.onrender.com`).
-You should see: `Escape Room Bot is alive ✅`.
-
-### UptimeRobot
-1. Create a free account at <https://uptimerobot.com>.
-2. **Add New Monitor** → **Monitor Type: HTTP(s)**.
-3. **URL:** your Render URL (e.g. `https://your-app.onrender.com`).
-4. **Monitoring Interval:** 5 minutes.
-5. Save. UptimeRobot now pings the bot every 5 minutes, keeping it awake.
-
-> Note: Render's free tier still has a monthly hours cap. UptimeRobot prevents the
-> *idle-sleep*, but won't bypass a hard monthly limit if you hit it.
-
----
-
-## 🎮 Commands
-
-### For players
-| Command | What it does | Where |
+| Variable | Required | Purpose |
 |---|---|---|
-| `/startstory` | Pick a story and begin (unlocks its Level 1 channels). | `#escape-room-hub` only |
-| `/answer` | Submit an answer. If you're in several stories, add the `story` option. | the `answer-…` channel for your level |
-| `/hint` | Get the next hint for your current level (limited per level). | the `answer-…` channel for your level |
-| `/myprogress` | See every story: completed, in progress, not started. | anywhere you can run commands |
+| `DISCORD_TOKEN` | **yes** | Bot token. The process exits without it. |
+| `DISCORD_CLIENT_ID` | **yes** | Needed to register slash commands. |
+| `DISCORD_GUILD_ID` | recommended | Your server id. |
+| `DATABASE_URL` | **yes** | PostgreSQL connection string. |
+| `DATABASE_SSL` | no | Set to `false` for a local Postgres without TLS. |
+| `PORT` | no | HTTP port, defaults to `3000`. |
+| `NODE_ENV` | recommended | Set to `production` so cookies get the `Secure` flag. |
+| `ADMIN_DASHBOARD_TOKEN` | for the dashboard | The code admins type to sign in. |
+| `DASHBOARD_URL` | no | Public URL, used for the dashboard link in Discord. |
+| `OPENROUTER_API_KEY` | no | AI verifier, tried first. |
+| `GROQ_API_KEY` | no | AI verifier, tried second. |
+| `GEMINI_API_KEY` | no | AI verifier, tried third. |
+| `FORTNITE_API_KEY` | no | Optional; the public API works without it. |
 
-> **Channel rules:** Discord requires a user to have *Send Messages* to run any
-> slash command, so escape-room channels allow typing — but the bot instantly
-> deletes any free-chat message players post there, keeping the channels clean.
-> **#lounge** is exempt (free chat allowed). Admins can type anywhere.
-> The admin commands below are hidden from non-admins entirely.
->
-> Note: Discord does not let a bot hide a *player* command (like `/answer`) from
-> the command list in specific channels — that needs a server admin to set it
-> manually under **Server Settings → Integrations**. The bot instead politely
-> rejects a command used in the wrong channel with an ephemeral message.
-
-### For admins
-| Command | What it does |
-|---|---|
-| `/setup` | Build every role + channel for every story (incl. the public **#lounge**). Safe to run again; it skips what already exists. |
-| `/teardown` | Delete ALL escape-room channels and roles (requires `confirm: yes`). Use it to wipe duplicates, then run `/setup` for a clean rebuild. |
-| `/reset` | Reset a player (one story or all). |
-| `/newstory` | Announce a new story to everyone who already finished one. |
-| `/serverprogress` | See how many players are on each level. |
-
-> Run `/setup` again any time you add a new story — it only creates what's missing.
+Any one AI key is enough — the verifier tries the configured providers in order and moves
+on if one fails. With no key at all, submissions simply go straight to manual review.
 
 ---
 
-## ✍️ Adding your own story (the fun part)
+## Scoring
 
-1. **Copy the template:**
-   ```bash
-   cp data/stories/_TEMPLATE.js data/stories/sunken-city.js
-   ```
-   (On Windows PowerShell: `Copy-Item data/stories/_TEMPLATE.js data/stories/sunken-city.js`)
+Points are configurable in `/setup` and default to:
 
-2. **Edit `sunken-city.js`.** The template is fully commented, but the essentials:
-   - `id` — unique, lowercase, no spaces (used in role names).
-   - `name`, `description`, `emoji`, `color` (6-digit hex like `#9b59b6`).
-   - `levels` — an array; each level has `id` (1,2,3…), `name`, `difficulty` (1-5),
-     `channels` (the story rooms), `answers` (every accepted spelling),
-     `hints` (revealed one at a time), and `successMessage`.
-   - The **last level** is automatically the finale (grants the winner role +
-     Hall of Fame post). No extra config.
-
-3. **Restart the bot**, then run **`/setup`** in Discord. Done — the new story's
-   roles and channels appear automatically and it shows up in `/startstory`.
-
-### Tips for good puzzles
-- Put the clue in one channel and the "key" to read it in another — it makes players explore.
-- Accept multiple spellings in `answers` (e.g. `['53', 'fifty three', 'fifty-three']`).
-- Order `hints` from a gentle nudge to almost-the-answer.
-- A meta-puzzle (collecting one letter per level into a final word) makes a satisfying finale —
-  see the last level of `forgotten-frequency.js` for an example.
-
----
-
-## 🛠️ Troubleshooting
-
-- **Commands don't show up:** they register per-guild on startup; give it a few seconds,
-  then fully close and reopen Discord. Check the logs for `✅ Slash commands registered`.
-- **Bot can't create channels/roles:** make sure the bot's role is high in the role list
-  and has Administrator (or at least Manage Roles + Manage Channels).
-- **"No open ports detected" on Render:** make sure Start Command is `node bot.js` and you
-  did not override `PORT`. The keepalive server handles this.
-- **Color errors:** always use 6-digit hex (`#5865f2`), never 3-digit (`#55f`).
+```
+points = kills × 1 + (win ? 10 : 0)
 ```
 
+Only **approved** submissions score. Rejecting or removing a submission takes its points
+back immediately. A player can hold at most one approved win per tournament, and the same
+screenshot can never be submitted twice in a server — both are enforced by the database,
+not by application code.
+
 ---
 
-_Built with discord.js v14 · KgWorks_
+## Project structure
+
+```
+index.js                     ← entry point
+app.js                       ← client, HTTP server, event wiring
+deploy/deployCommands.js     ← setup-gated command registration
+commands/<name>/<name>.js    ← one folder per command
+utils/
+  db.js                      ← single shared pool + full schema
+  configStore.js             ← per-guild settings
+  teamStore.js               ← teams and membership
+  tournamentStore.js         ← tournaments, regions, registrations
+  submissionStore.js         ← submissions and moderation log
+  scoreStore.js              ← point aggregation
+  leaderboards.js            ← embeds and live board refresh
+  aiVerifier.js              ← multi-provider screenshot verification
+  fortnite*.js               ← item shop and news feeds
+  dashboard.js               ← the web dashboard
+public/admin/                ← dashboard frontend
+test/                        ← node:test suites
+```
+
+Component `customId`s follow `<commandName>:<action>[:<arg>]`. The first segment must
+match a registered command name — that is how interactions are routed.
+
+---
+
+## Tests
+
+```bash
+npm test
+```
+
+Covers the point formula, AI normalisation and confidence thresholds, Fortnite shop and
+news parsing, command shapes, and the rule that admin commands stay hidden.

@@ -1,20 +1,25 @@
 {
-  "name": "escape-room-bot",
-  "version": "4.0.0",
-  "description": "Multi-story Discord Escape Room Bot · KgWorks",
-  "main": "bot.js",
+  "name": "fortnite-tournament-bot",
+  "version": "1.0.0",
+  "description": "Fortnite tournament Discord bot with AI screenshot verification",
+  "main": "index.js",
   "scripts": {
-    "start": "node bot.js",
-    "dev": "nodemon bot.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "node --test",
+    "validate-sql": "node scripts/validate-sql.js"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
-    "discord.js": "^14.15.3",
-    "dotenv": "^16.4.5"
+    "axios": "^1.7.7",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "pg": "^8.13.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.0"
+    "nodemon": "^3.1.7",
+    "pgsql-parser": "^18.2.6"
   }
 }
