@@ -119,17 +119,18 @@ async function checkLockout(ip) {
 }
 
 async function recordFailure(ip) {
+    const lockUntil = new Date(Date.now() + LOCKOUT_MS);
     await query(
         `INSERT INTO admin_login_attempts (ip, failures, locked_until)
          VALUES ($1, 1, NULL)
          ON CONFLICT (ip) DO UPDATE
          SET failures = admin_login_attempts.failures + 1,
              locked_until = CASE
-                 WHEN admin_login_attempts.failures + 1 >= $2 THEN NOW() + $3 * INTERVAL '1 millisecond'
+                 WHEN admin_login_attempts.failures + 1 >= $2 THEN $3
                  ELSE admin_login_attempts.locked_until
              END,
              updated_at = NOW()`,
-        [ip, MAX_LOGIN_FAILURES, LOCKOUT_MS],
+        [ip, MAX_LOGIN_FAILURES, lockUntil],
     );
 }
 
