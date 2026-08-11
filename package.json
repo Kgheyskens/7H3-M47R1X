@@ -9,6 +9,7 @@
     "test": "node --test",
     "doctor": "node scripts/doctor.js",
     "smoke": "node scripts/smoke-dashboard.js",
+    "smoke:flow": "node scripts/smoke-flow.js",
     "validate-sql": "node scripts/validate-sql.js"
   },
   "engines": {

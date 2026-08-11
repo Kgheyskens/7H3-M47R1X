@@ -106,6 +106,21 @@ const server = http.createServer((req, res) => handler(req, res));
         assert.equal(res.status, 401);
         record('unauthenticated API returns 401, not a redirect');
 
+        // The CSP forbids inline scripts and styles, so every page must load its JS and CSS
+        // from a file. An inline <script> would be silently dropped by the browser and the
+        // login form would fall back to a plain GET, which looks like "the page just reloads".
+        const loginHtml = (await request('GET', '/admin/login')).body.toString();
+        assert.doesNotMatch(loginHtml, /<script(?![^>]*\bsrc=)[^>]*>/, 'the login page must not use an inline <script>');
+        assert.doesNotMatch(loginHtml, /<style[\s>]/, 'the login page must not use an inline <style>');
+        assert.doesNotMatch(loginHtml, /\son[a-z]+=/, 'the login page must not use an inline event handler');
+        record('the login page has no inline script, style or handler the CSP would block');
+
+        // Assets the login page pulls in must be reachable while still signed out.
+        for (const asset of ['/admin/login.css', '/admin/login.js']) {
+            assert.equal((await request('GET', asset)).status, 200, `${asset} must load before login`);
+        }
+        record('the login page assets are served to anonymous visitors');
+
         res = await request('POST', '/admin/login', { token: 'wrong' });
         assert.equal(res.status, 401);
         record('a wrong administrator code is rejected');
@@ -118,7 +133,9 @@ const server = http.createServer((req, res) => handler(req, res));
         res = await request('GET', '/admin');
         assert.equal(res.status, 200);
         assert.match(res.body.toString(), /Tournament dashboard/);
-        record('the dashboard page loads once signed in');
+        assert.doesNotMatch(res.body.toString(), /<script(?![^>]*\bsrc=)[^>]*>/, 'no inline <script>');
+        assert.doesNotMatch(res.body.toString(), /<style[\s>]/, 'no inline <style>');
+        record('the dashboard page loads once signed in, with no CSP-blocked inline code');
 
         // --- Seed a submission ----------------------------------------------
         await db.query('INSERT INTO guild_config (guild_id, setup_completed) VALUES ($1, TRUE)', [GUILD_ID]);

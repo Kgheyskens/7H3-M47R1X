@@ -13,11 +13,17 @@ These need nothing but `npm install`:
 
 ```bash
 npm test              # 13 unit tests: scoring, AI parsing, shop/news parsing
-npm run validate-sql  # parses all 67 SQL statements with the real Postgres grammar
+npm run validate-sql  # parses all 70 SQL statements with the real Postgres grammar
+npm run smoke         # 17 dashboard checks against an in-memory Postgres
+npm run smoke:flow    # 30 checks: setup gate → teams → tournament → approval → standings
 npm run doctor        # tells you what is still missing
 ```
 
 If these pass, the logic is sound. Everything below tests the integration.
+
+> The two smoke tests run on pg-mem, which does not emulate everything real Postgres does
+> (aggregate `FILTER`, and `RETURNING` on a losing `ON CONFLICT DO NOTHING`). Where that
+> bites, the assertions say so. Those paths are covered by `validate-sql` and Stage 8.
 
 ---
 
@@ -118,23 +124,55 @@ Run `/setup` in your test server.
 | 6 | **Scoring** | Try `1` and `10`, then try letters — it should refuse letters |
 | 7 | **Finish setup** | Green "Setup complete" panel |
 
-Now check the terminal: `Deployed 7 command(s) to guild <id> (setup complete).`
+Now check the terminal: `Deployed 8 command(s) to guild <id> (setup complete).`
 
-In Discord, type `/` again — all 7 commands should now appear.
+In Discord, type `/` again — all 8 commands should now appear.
 
 **Try the gate from the other side:** before finishing, press **Finish setup** with only
 1 team. It must refuse and list what is missing.
 
 ---
 
+## Stage 4b — Members must not see admin commands
+
+Discord enforces permissions per command, so all admin actions live under `/manage`.
+
+As an **administrator**, typing `/` shows all 8:
+
+```
+/tournament  /team  /leaderboard  /submit          ← everyone
+/setup  /manage  /review  /admin-submit            ← admin only
+```
+
+Now test it as a **normal member**. Either use a second account, or temporarily remove
+your own Administrator role. Type `/` — you must see **only** these four:
+
+```
+/tournament join | info | list
+/team list | status
+/leaderboard teams | players
+/submit
+```
+
+If `/manage`, `/setup`, `/review` or `/admin-submit` is visible to a member, the gate is
+broken. Check that the command has `.setDefaultMemberPermissions(PermissionFlagsBits.Administrator)`.
+
+> Discord caches the command list per client. If a member still sees an old command, press
+> Ctrl+R to reload, or wait a minute.
+
+A member must also not reach an admin action by typing it manually — `/manage` is rejected
+by Discord itself before the bot ever sees it.
+
+---
+
 ## Stage 5 — Teams
 
-1. `/team panel` → a panel with one button per team appears
+1. `/manage team panel` → a panel with one button per team appears
 2. Click a team button → you get the role, ephemeral confirmation
 3. Click a **different** team button → refused, because switching is off by default
 4. `/setup` → **Options** → enable **Team switching** → click another team → now it works
 5. `/team status` → shows your team
-6. `/team reset member:@you` → role removed, you can choose again
+6. `/manage team reset member:@you` → role removed, you can choose again
 7. `/team list` → all teams with 0 points
 
 **Race check:** click two team buttons as fast as you can. Only one may stick — the
@@ -145,8 +183,14 @@ database decides, not the code.
 ## Stage 6 — Tournament
 
 ```
-/tournament create name:Test Cup regions:EU, NAE
-/tournament status status:Open
+/manage tournament create name:Test Cup regions:EU, NAE
+```
+
+A new tournament starts as a **draft**. Check that `/tournament info` refuses it for now
+("not open yet") — a draft you are still preparing must stay invisible to members.
+
+```
+/manage tournament status status:Open
 ```
 
 Check the announcement channel for the registration post.
@@ -157,10 +201,10 @@ Check the announcement channel for the registration post.
 
 - Without a team first → it must refuse with "Join a team first"
 - `/tournament info` → shows regions, 1 player, no code yet
-- `/tournament players` → shows your registration
+- `/manage tournament players` → shows your registration with its Epic name
 
 ```
-/tournament code region:EU code:1234-5678-9012
+/manage tournament code region:EU code:1234-5678-9012
 ```
 
 Check the announcement channel: the code is posted **and** you are pinged (because you
@@ -254,13 +298,13 @@ Then:
 ## Stage 9 — Live boards
 
 ```
-/leaderboard post
+/manage leaderboard post
 ```
 
 Two messages appear. Now approve a submission and watch them update within a minute —
 they also refresh immediately after every review.
 
-Delete one board message, then run `/leaderboard post` again to re-create it.
+Delete one board message, then run `/manage leaderboard post` again to re-create it.
 
 ---
 

@@ -13,6 +13,8 @@ const PUBLIC_DIRECTORY = path.join(__dirname, '..', 'public', 'admin');
 const STATIC_FILES = {
     '/admin': { file: path.join(PUBLIC_DIRECTORY, 'index.html'), type: 'text/html; charset=utf-8', auth: true },
     '/admin/login': { file: path.join(PUBLIC_DIRECTORY, 'login.html'), type: 'text/html; charset=utf-8', auth: false },
+    '/admin/login.css': { file: path.join(PUBLIC_DIRECTORY, 'login.css'), type: 'text/css; charset=utf-8', auth: false },
+    '/admin/login.js': { file: path.join(PUBLIC_DIRECTORY, 'login.js'), type: 'text/javascript; charset=utf-8', auth: false },
     '/admin/app.css': { file: path.join(PUBLIC_DIRECTORY, 'app.css'), type: 'text/css; charset=utf-8', auth: true },
     '/admin/app.js': { file: path.join(PUBLIC_DIRECTORY, 'app.js'), type: 'text/javascript; charset=utf-8', auth: true },
 };

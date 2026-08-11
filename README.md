@@ -12,16 +12,16 @@ verified from a screenshot by AI before a human confirms them on a web dashboard
    the *only* command the server has. Finishing it deploys every other command.
 2. **Teams** — the wizard creates team roles (or links existing ones). Members join a team
    from a button panel; their points count for that team.
-3. **Create** — `/tournament create name:"Summer Cup" regions:"EU, NAE, NAW"`.
-4. **Open** — `/tournament status status:Open` announces registration.
+3. **Create** — `/manage tournament create name:"Summer Cup" regions:"EU, NAE, NAW"`.
+4. **Open** — `/manage tournament status status:Open` announces registration.
 5. **Register** — players run `/tournament join` with their exact Epic name and region.
-6. **Play** — `/tournament code region:EU code:ABC-123` posts the creator code and pings
-   everyone registered in that region.
+6. **Play** — `/manage tournament code region:EU code:ABC-123` posts the creator code and
+   pings everyone registered in that region.
 7. **Submit** — after the match, players run `/submit` with their kills, whether they won,
    and their end-of-match screenshot. Staff can also submit for someone with `/admin-submit`.
 8. **Review** — the AI reads the kills, the win banner and the Epic name from the image.
    Nothing scores until a human approves it on the dashboard or with `/review approve`.
-9. **Standings** — `/leaderboard post` puts self-updating team and player boards in a
+9. **Standings** — `/manage leaderboard post` puts self-updating team and player boards in a
    channel. They refresh every minute and after every review.
 
 ---
@@ -30,16 +30,21 @@ verified from a screenshot by AI before a human confirms them on a web dashboard
 
 | Command | Who | What it does |
 |---|---|---|
-| `/setup` | Admin | The configuration wizard. Re-run it any time to change settings. |
-| `/tournament create\|status\|code\|players` | Admin | Manage tournaments, regions and creator codes. |
 | `/tournament join\|info\|list` | Everyone | Register and view tournaments. |
-| `/team panel\|assign\|reset` | Admin | Post the join panel, move or reset members. |
 | `/team list\|status` | Everyone | View teams and who is on them. |
-| `/submit` | Everyone | Submit your own match result. |
-| `/admin-submit` | Staff | Submit a result on behalf of a player. |
-| `/review queue\|show\|approve\|reject\|remove\|logs\|dashboard` | Admin | Review submissions from Discord. |
 | `/leaderboard teams\|players` | Everyone | View the standings. |
-| `/leaderboard post` | Admin | Post the self-updating boards. |
+| `/submit` | Everyone | Submit your own match result. |
+| `/setup` | Admin | The configuration wizard. Re-run it any time to change settings. |
+| `/manage tournament create\|code\|status\|players\|info` | Admin | Manage tournaments, regions and creator codes. |
+| `/manage team panel\|assign\|reset` | Admin | Post the join panel, move or reset members. |
+| `/manage leaderboard post` | Admin | Post the self-updating boards. |
+| `/review queue\|show\|approve\|reject\|remove\|logs\|dashboard` | Admin | Review submissions from Discord. |
+| `/admin-submit` | Staff | Submit a result on behalf of a player. |
+
+Admin commands carry `default_member_permissions: Administrator`, so Discord hides them
+from members entirely. Because Discord enforces permissions per *command* and not per
+subcommand, every admin action lives under `/manage` rather than alongside the member
+subcommands it relates to.
 
 ---
 
