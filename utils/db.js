@@ -28,6 +28,11 @@ CREATE TABLE IF NOT EXISTS guild_config (
     rules_accept_role_id TEXT,
     roles_panel_channel_id TEXT,
     roles_panel_message_id TEXT,
+    news_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    news_channel_id TEXT,
+    news_feed_url TEXT,
+    news_mention_role_id TEXT,
+    news_seen_ids TEXT[] NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

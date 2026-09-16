@@ -6,7 +6,9 @@ const path = require('node:path');
 const { Client, Collection, Events, GatewayIntentBits } = require('discord.js');
 
 const { clearGlobalCommands, deployGuildCommands } = require('./deploy/deployCommands');
+const { syncAllGuilds } = require('./utils/agentSync');
 const { ensureConfig, isSetupCompleted } = require('./utils/configStore');
+const { refreshAllNews } = require('./utils/newsFeed');
 const { sendGoodbye, sendWelcome } = require('./utils/welcomeGoodbye');
 
 const BOT_TOKEN = process.env.DISCORD_TOKEN || process.env.CLIENT_TOKEN;
@@ -49,6 +51,9 @@ http.createServer((req, res) => {
     console.log(`HTTP server listening on port ${PORT} for uptime pings.`);
 });
 
+const REFRESH_NEWS_MS = 15 * 60 * 1000;
+const SYNC_AGENTS_MS = 12 * 60 * 60 * 1000;
+
 client.once(Events.ClientReady, async (readyClient) => {
     console.log(`Ready! Logged in as ${readyClient.user.tag}`);
 
@@ -62,6 +67,17 @@ client.once(Events.ClientReady, async (readyClient) => {
             console.error(`Could not initialise guild ${guild.id}:`, error.message);
         }
     }
+
+    refreshAllNews(readyClient).catch((error) => console.error('Initial news refresh failed:', error.message));
+    syncAllGuilds(readyClient).catch((error) => console.error('Initial agent sync failed:', error.message));
+
+    setInterval(() => {
+        refreshAllNews(readyClient).catch((error) => console.error('Scheduled news refresh failed:', error.message));
+    }, REFRESH_NEWS_MS);
+
+    setInterval(() => {
+        syncAllGuilds(readyClient).catch((error) => console.error('Scheduled agent sync failed:', error.message));
+    }, SYNC_AGENTS_MS);
 });
 
 client.on(Events.GuildCreate, async (guild) => {

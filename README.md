@@ -1,8 +1,9 @@
 # Valorant Community Bot
 
 A Discord bot for a Valorant community server: configurable welcome and goodbye messages,
-a rules message with an optional accept-to-enter button, and self-assign roles for
-competitive rank and the agents members main.
+a rules message with an optional accept-to-enter button, self-assign roles for competitive
+rank and the agents members main (kept in sync automatically as Riot ships new agents), and
+an optional news feed.
 
 ---
 
@@ -16,11 +17,19 @@ competitive rank and the agents members main.
    **I agree** before they get a role — a simple gate for the rest of the server.
 4. **Ranks & agents** — create the standard rank ladder (Iron → Radiant) and the full agent
    roster with one click each, grouped by class (Duelist, Controller, Initiator, Sentinel).
-   Add or remove individual ranks any time — useful whenever Riot changes the tier list or
-   ships a new agent. Post the panel and members pick their own rank and every agent they
-   main from select menus.
-5. **`/roles`** — a member can check what they currently have picked.
-6. **`/agent`** — a random-agent roulette for when nobody can decide who to lock in.
+   Add or remove individual ranks any time — useful whenever Riot changes the tier list.
+   Post the panel and members pick their own rank and every agent they main from select
+   menus.
+5. **Agents stay current on their own** — the agent roster is pulled from the live
+   [valorant-api.com](https://valorant-api.com) agent list, not a hardcoded snapshot. Every
+   12 hours (and once at startup) the bot checks for any agent that doesn't have a role yet,
+   creates it, updates the posted panel in place, and drops a "new agent added" note in the
+   panel channel. A **Sync agents now** button in `/setup` does the same thing on demand.
+6. **News feed** — point the bot at any RSS or Atom feed (official Valorant news, a fan
+   site, esports coverage, whatever) and it posts new articles to a channel every 15
+   minutes, with an optional role ping on the first article of each batch.
+7. **`/roles`** — a member can check what they currently have picked.
+8. **`/agent`** — a random-agent roulette for when nobody can decide who to lock in.
 
 ---
 
@@ -107,10 +116,13 @@ commands/agent/agent.js      ← `/agent` random-agent roulette
 utils/
   db.js                      ← single shared pool + schema
   configStore.js             ← per-guild settings
-  selfRoles.js                ← rank/agent role CRUD
-  welcomeGoodbye.js           ← welcome/goodbye message sending
-  panelRender.js              ← rules message + roles panel embeds/components
-  valorantData.js             ← default rank ladder and agent roster
+  selfRoles.js               ← rank/agent role CRUD
+  welcomeGoodbye.js          ← welcome/goodbye message sending
+  panelRender.js             ← rules message + roles panel embeds/components
+  valorantData.js            ← default rank ladder + offline agent fallback
+  valorantApi.js             ← live agent roster from valorant-api.com
+  agentSync.js               ← creates roles for newly released agents
+  newsFeed.js                ← generic RSS/Atom feed poster
 test/                        ← node:test suites
 scripts/                     ← doctor, smoke test, SQL validator
 ```

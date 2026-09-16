@@ -47,4 +47,9 @@ async function clearCategory(guildId, category) {
     await query('DELETE FROM self_roles WHERE guild_id = $1 AND category = $2', [guildId, category]);
 }
 
-module.exports = { addRole, clearCategory, getAllRoles, getRoles, removeRole };
+async function getGuildsWithCategory(category) {
+    const result = await query('SELECT DISTINCT guild_id FROM self_roles WHERE category = $1', [category]);
+    return result.rows.map((row) => row.guild_id);
+}
+
+module.exports = { addRole, clearCategory, getAllRoles, getGuildsWithCategory, getRoles, removeRole };

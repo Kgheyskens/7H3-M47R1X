@@ -15,10 +15,12 @@ const {
 } = require('discord.js');
 
 const { deployGuildCommands } = require('../../deploy/deployCommands');
+const { syncAgents } = require('../../utils/agentSync');
 const { ensureConfig, getConfig, updateConfig } = require('../../utils/configStore');
 const { rolesPanelPayload, rulesPayload } = require('../../utils/panelRender');
 const selfRoles = require('../../utils/selfRoles');
-const { CLASS_ORDER, CLASSES, DEFAULT_AGENTS, DEFAULT_RANKS } = require('../../utils/valorantData');
+const { CLASS_ORDER, CLASSES, DEFAULT_RANKS } = require('../../utils/valorantData');
+const { getAgentRoster } = require('../../utils/valorantApi');
 const { DEFAULT_GOODBYE, DEFAULT_WELCOME } = require('../../utils/welcomeGoodbye');
 
 const CHANNEL_FIELDS = {
@@ -26,6 +28,7 @@ const CHANNEL_FIELDS = {
     goodbye: { column: 'goodbye_channel_id', label: 'Goodbye channel' },
     rules: { column: 'rules_channel_id', label: 'Rules channel' },
     rolespanel: { column: 'roles_panel_channel_id', label: 'Roles panel channel' },
+    news: { column: 'news_channel_id', label: 'News channel' },
 };
 
 function check(value) {
@@ -80,8 +83,15 @@ async function renderOverview(interaction) {
                 name: 'Ranks & agents',
                 value: [
                     `${check(ranks.length)} **${ranks.length}** rank role(s)`,
-                    `${check(agents.length)} **${agents.length}** agent role(s)`,
+                    `${check(agents.length)} **${agents.length}** agent role(s) — kept in sync with new releases automatically`,
                     `${check(config.roles_panel_channel_id)} **Panel channel** — ${config.roles_panel_channel_id ? `<#${config.roles_panel_channel_id}>` : '_not set_'}`,
+                ].join('\n'),
+            },
+            {
+                name: 'News',
+                value: [
+                    `${check(config.news_enabled)} **Feed** — ${config.news_channel_id ? `<#${config.news_channel_id}>` : '_no channel_'}`,
+                    config.news_feed_url ? `_${config.news_feed_url}_` : '_no feed URL set_',
                 ].join('\n'),
             },
         );
@@ -96,6 +106,7 @@ async function renderOverview(interaction) {
                     { label: 'Goodbye message', value: 'goodbye', emoji: '🚪' },
                     { label: 'Rules', value: 'rules', emoji: '📜' },
                     { label: 'Ranks & agents', value: 'roles', emoji: '🎮' },
+                    { label: 'News feed', value: 'news', emoji: '📰' },
                 ),
         ),
         new ActionRowBuilder().addComponents(
@@ -293,6 +304,47 @@ async function postRules(interaction) {
     await renderRules(interaction);
 }
 
+// --- News --------------------------------------------------------------------
+
+async function renderNews(interaction) {
+    const config = await getConfig(interaction.guildId);
+
+    const embed = new EmbedBuilder()
+        .setColor(0xff4655)
+        .setTitle('📰 News feed')
+        .setDescription('Posts new articles from any RSS or Atom feed — official Valorant news, a fan site, whatever you point it at.')
+        .addFields(
+            { name: `${check(config.news_enabled)} Enabled`, value: config.news_enabled ? 'Checked every 15 minutes.' : 'Turned off.' },
+            { name: 'Channel', value: config.news_channel_id ? `<#${config.news_channel_id}>` : '_not set_' },
+            { name: 'Feed URL', value: config.news_feed_url ? config.news_feed_url : '_not set_' },
+            { name: 'Ping role', value: config.news_mention_role_id ? `<@&${config.news_mention_role_id}>` : '_none_' },
+        );
+
+    await respond(interaction, {
+        embeds: [embed],
+        components: [
+            new ActionRowBuilder().addComponents(
+                new ChannelSelectMenuBuilder()
+                    .setCustomId('setup:setchannel:news')
+                    .setPlaceholder('Select the news channel')
+                    .addChannelTypes(ChannelType.GuildText),
+            ),
+            new ActionRowBuilder().addComponents(
+                new RoleSelectMenuBuilder().setCustomId('setup:setnewsrole').setPlaceholder('Role to ping on new articles (optional)'),
+            ),
+            new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('setup:editmsg:newsurl').setLabel('Set feed URL').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('setup:toggle:news_enabled')
+                    .setLabel(config.news_enabled ? 'Disable' : 'Enable')
+                    .setStyle(config.news_enabled ? ButtonStyle.Danger : ButtonStyle.Success)
+                    .setDisabled(!config.news_channel_id || !config.news_feed_url),
+                new ButtonBuilder().setCustomId('setup:back').setLabel('Back').setStyle(ButtonStyle.Secondary),
+            ),
+        ],
+    });
+}
+
 // --- Ranks & agents ----------------------------------------------------------
 
 async function renderRoles(interaction) {
@@ -303,7 +355,10 @@ async function renderRoles(interaction) {
     const embed = new EmbedBuilder()
         .setColor(0xff4655)
         .setTitle('🎮 Ranks & agents')
-        .setDescription('Members self-assign these from a panel. Add ranks any time as the game evolves.')
+        .setDescription(
+            'Members self-assign these from a panel. Add ranks any time as the game evolves — new agents are ' +
+                'picked up from the live Valorant roster automatically, or press **Sync agents now**.',
+        )
         .addFields(
             {
                 name: `Ranks (${ranks.length})`,
@@ -342,6 +397,12 @@ async function renderRoles(interaction) {
                     .setLabel('Remove agent')
                     .setStyle(ButtonStyle.Danger)
                     .setDisabled(!agents.length),
+                new ButtonBuilder()
+                    .setCustomId('setup:agentsync')
+                    .setLabel('Sync agents now')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setEmoji('🔄')
+                    .setDisabled(!agents.length),
             ),
             new ActionRowBuilder().addComponents(
                 new ChannelSelectMenuBuilder()
@@ -363,31 +424,57 @@ async function renderRoles(interaction) {
 }
 
 async function createDefaultRoles(interaction, category, defaults) {
-    await interaction.deferUpdate();
     const existing = await selfRoles.getRoles(interaction.guildId, category);
     const existingLabels = new Set(existing.map((row) => row.label.toLowerCase()));
+
+    const failed = [];
 
     for (const entry of defaults) {
         if (existingLabels.has(entry.label.toLowerCase())) continue;
 
-        const role = await interaction.guild.roles.create({
-            name: entry.label,
-            color: entry.color,
-            hoist: category === 'rank',
-            mentionable: false,
-            reason: `Valorant ${category} role created by ${interaction.user.tag}`,
-        });
+        // One bad role must not abort the rest of the batch — otherwise a single transient
+        // error silently truncates the roster to whatever was created so far.
+        try {
+            const role = await interaction.guild.roles.create({
+                name: entry.label,
+                color: entry.color ?? undefined,
+                hoist: category === 'rank',
+                mentionable: false,
+                reason: `Valorant ${category} role created by ${interaction.user.tag}`,
+            });
 
-        await selfRoles.addRole(interaction.guildId, {
-            category,
-            roleId: role.id,
-            label: entry.label,
-            group: entry.group || null,
-            emoji: entry.emoji || null,
-        });
+            await selfRoles.addRole(interaction.guildId, {
+                category,
+                roleId: role.id,
+                label: entry.label,
+                group: entry.group || null,
+                emoji: entry.emoji || null,
+            });
+        } catch (error) {
+            console.error(`Could not create the ${category} role "${entry.label}" in guild ${interaction.guildId}:`, error.message);
+            failed.push(entry.label);
+        }
     }
 
     await renderRoles(interaction);
+
+    if (failed.length) {
+        await interaction.followUp({
+            content: `Could not create ${failed.length} role(s): ${failed.join(', ')}. Check the bot's **Manage Roles** permission and try again.`,
+            ephemeral: true,
+        });
+    }
+}
+
+async function syncAgentsNow(interaction) {
+    await interaction.deferUpdate();
+    const { added } = await syncAgents(interaction.guild);
+    await renderRoles(interaction);
+
+    await interaction.followUp({
+        content: added.length ? `Added ${added.length} new agent(s): ${added.join(', ')}.` : 'Everyone is already up to date — no new agents.',
+        ephemeral: true,
+    });
 }
 
 async function postRolesPanel(interaction) {
@@ -413,6 +500,37 @@ async function postRolesPanel(interaction) {
 
     await updateConfig(interaction.guildId, { roles_panel_message_id: message.id });
     await renderRoles(interaction);
+}
+
+function showNewsUrlModal(interaction, current) {
+    return interaction.showModal(
+        new ModalBuilder()
+            .setCustomId('setup:newsurlmodal')
+            .setTitle('News feed URL')
+            .addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('url')
+                        .setLabel('RSS or Atom feed URL')
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true)
+                        .setMaxLength(300)
+                        .setPlaceholder('https://example.com/valorant/feed/')
+                        .setValue(current || ''),
+                ),
+            ),
+    );
+}
+
+async function handleNewsUrlModal(interaction) {
+    const url = interaction.fields.getTextInputValue('url').trim();
+    if (!/^https?:\/\//i.test(url)) {
+        await interaction.reply({ content: 'That does not look like a valid feed URL.', ephemeral: true });
+        return;
+    }
+
+    await updateConfig(interaction.guildId, { news_feed_url: url, news_seen_ids: [] });
+    await renderNews(interaction);
 }
 
 function showAddModal(interaction, category) {
@@ -462,16 +580,20 @@ async function handleAddModal(interaction, category) {
 
     await interaction.deferReply({ ephemeral: true });
 
-    const role = await interaction.guild.roles.create({
-        name,
-        hoist: category === 'rank',
-        mentionable: false,
-        reason: `Valorant ${category} role created by ${interaction.user.tag}`,
-    });
+    try {
+        const role = await interaction.guild.roles.create({
+            name,
+            hoist: category === 'rank',
+            mentionable: false,
+            reason: `Valorant ${category} role created by ${interaction.user.tag}`,
+        });
 
-    await selfRoles.addRole(interaction.guildId, { category, roleId: role.id, label: name, group });
-
-    await interaction.editReply(`Created **${name}** as a ${role}. Run \`/setup\` again to continue.`);
+        await selfRoles.addRole(interaction.guildId, { category, roleId: role.id, label: name, group });
+        await interaction.editReply(`Created **${name}** as a ${role}. Run \`/setup\` again to continue.`);
+    } catch (error) {
+        console.error(`Could not create the ${category} role "${name}" in guild ${interaction.guildId}:`, error.message);
+        await interaction.editReply(`Could not create the role for **${name}**. Check the bot's **Manage Roles** permission and try again.`);
+    }
 }
 
 async function renderRemovePicker(interaction, category, group) {
@@ -547,6 +669,7 @@ async function handleFinish(interaction) {
                         '• Post the rules and role panel from the **Rules** and **Ranks & agents** sections if you have not already.',
                         '• `/roles` — members can check what they picked.',
                         '• `/agent` — a fun random-agent roulette for when nobody can decide who to lock in.',
+                        '• New agents are added automatically as Riot ships them — no action needed.',
                         '',
                         'Run `/setup` again at any time to change these settings.',
                     ].join('\n'),
@@ -588,6 +711,11 @@ module.exports = {
         if (action === 'roles') return renderRoles(interaction);
 
         if (action === 'editmsg') {
+            if (argument === 'newsurl') {
+                const config = await getConfig(interaction.guildId);
+                return showNewsUrlModal(interaction, config.news_feed_url);
+            }
+
             const settings = {
                 welcome: { key: 'welcome', title: 'Welcome message', label: 'Message', maxLength: 500, placeholder: '{user} {username} {server} {membercount}' },
                 goodbye: { key: 'goodbye', title: 'Goodbye message', label: 'Message', maxLength: 500, placeholder: '{user} {username} {server} {membercount}' },
@@ -605,13 +733,23 @@ module.exports = {
             if (argument === 'welcome_enabled') return renderWelcome(interaction);
             if (argument === 'goodbye_enabled') return renderGoodbye(interaction);
             if (argument === 'rules_accept_enabled') return renderRules(interaction);
+            if (argument === 'news_enabled') return renderNews(interaction);
         }
 
         if (action === 'postrules') return postRules(interaction);
         if (action === 'postrolespanel') return postRolesPanel(interaction);
 
-        if (action === 'rankdefaults') return createDefaultRoles(interaction, 'rank', DEFAULT_RANKS);
-        if (action === 'agentdefaults') return createDefaultRoles(interaction, 'agent', DEFAULT_AGENTS);
+        if (action === 'rankdefaults') {
+            await interaction.deferUpdate();
+            return createDefaultRoles(interaction, 'rank', DEFAULT_RANKS);
+        }
+        if (action === 'agentdefaults') {
+            await interaction.deferUpdate();
+            const roster = await getAgentRoster();
+            return createDefaultRoles(interaction, 'agent', roster);
+        }
+        if (action === 'agentsync') return syncAgentsNow(interaction);
+
         if (action === 'rankadd') return showAddModal(interaction, 'rank');
         if (action === 'agentadd') return showAddModal(interaction, 'agent');
         if (action === 'rankremove') return renderRemovePicker(interaction, 'rank');
@@ -633,6 +771,7 @@ module.exports = {
             if (choice === 'goodbye') return renderGoodbye(interaction);
             if (choice === 'rules') return renderRules(interaction);
             if (choice === 'roles') return renderRoles(interaction);
+            if (choice === 'news') return renderNews(interaction);
         }
 
         if (action === 'setchannel') {
@@ -644,12 +783,19 @@ module.exports = {
             if (argument === 'goodbye') return renderGoodbye(interaction);
             if (argument === 'rules') return renderRules(interaction);
             if (argument === 'rolespanel') return renderRoles(interaction);
+            if (argument === 'news') return renderNews(interaction);
         }
 
         if (action === 'setacceptrole') {
             const [roleId] = interaction.values;
             await updateConfig(interaction.guildId, { rules_accept_role_id: roleId });
             return renderRules(interaction);
+        }
+
+        if (action === 'setnewsrole') {
+            const [roleId] = interaction.values;
+            await updateConfig(interaction.guildId, { news_mention_role_id: roleId });
+            return renderNews(interaction);
         }
 
         if (action === 'removepick') return handleRemovePick(interaction, argument);
@@ -664,5 +810,6 @@ module.exports = {
         const [, action, argument] = interaction.customId.split(':');
         if (action === 'msgmodal') return handleMessageModal(interaction, argument);
         if (action === 'addmodal') return handleAddModal(interaction, argument);
+        if (action === 'newsurlmodal') return handleNewsUrlModal(interaction);
     },
 };

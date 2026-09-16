@@ -1,6 +1,6 @@
 /**
  * Walks the whole setup flow against an in-memory Postgres: config defaults, welcome/goodbye
- * settings, rules, and self-assign rank/agent roles.
+ * settings, rules, self-assign rank/agent roles, and the news feed.
  *
  * Run with: npm run smoke
  */
@@ -72,6 +72,28 @@ function record(label) {
         const all = await selfRoles.getAllRoles(GUILD_ID);
         assert.equal(all.length, 3, 'ranks and agents share one table but stay distinguishable by category');
         record('getAllRoles returns every self-assignable role across both categories');
+
+        assert.deepEqual(await selfRoles.getGuildsWithCategory('agent'), [GUILD_ID]);
+        record('a guild with agent roles is discoverable for the scheduled auto-sync');
+
+        // --- News feed ------------------------------------------------------------
+        await config.updateConfig(GUILD_ID, {
+            news_enabled: true,
+            news_channel_id: 'chan-news',
+            news_feed_url: 'https://example.com/valorant/feed/',
+        });
+
+        current = await config.getConfig(GUILD_ID);
+        assert.equal(current.news_feed_url, 'https://example.com/valorant/feed/');
+        // pg-mem represents an empty TEXT[] as the literal string '{}' rather than an array
+        // the way real Postgres does — accept either here, real-array behaviour is covered
+        // by validate-sql and a real database in Stage 1 of TESTING.md.
+        assert.ok(Array.isArray(current.news_seen_ids) ? current.news_seen_ids.length === 0 : current.news_seen_ids === '{}');
+        record('news feed settings persist with an empty seen-ids backlog');
+
+        await config.updateConfig(GUILD_ID, { news_seen_ids: ['article-1', 'article-2'] });
+        assert.deepEqual((await config.getConfig(GUILD_ID)).news_seen_ids, ['article-1', 'article-2']);
+        record('seen article ids persist so a restart does not re-announce old news');
 
         // --- Finish -------------------------------------------------------------
         await config.updateConfig(GUILD_ID, { setup_completed: true });

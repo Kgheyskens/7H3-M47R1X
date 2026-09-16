@@ -35,6 +35,7 @@ const DEFAULT_AGENTS = [
     { label: 'Astra', group: 'controller', color: 0x7b2ff7 },
     { label: 'Harbor', group: 'controller', color: 0x1b998b },
     { label: 'Clove', group: 'controller', color: 0xff69b4 },
+    { label: 'Miks', group: 'controller', color: 0x8a8a8a },
 
     { label: 'Sova', group: 'initiator', color: 0x4a6572 },
     { label: 'Breach', group: 'initiator', color: 0xd35400 },
@@ -50,6 +51,11 @@ const DEFAULT_AGENTS = [
     { label: 'Chamber', group: 'sentinel', color: 0xd4af37 },
     { label: 'Deadlock', group: 'sentinel', color: 0x00ced1 },
     { label: 'Vyse', group: 'sentinel', color: 0x9b59b6 },
+    { label: 'Veto', group: 'sentinel', color: 0x8a8a8a },
 ];
+
+// This list is a fallback snapshot for when the live valorant-api.com roster (see
+// utils/valorantApi.js) can't be reached — it will drift out of date as Riot ships new
+// agents, which is expected; the live fetch is the source of truth in normal operation.
 
 module.exports = { CLASSES, CLASS_ORDER, DEFAULT_RANKS, DEFAULT_AGENTS };
