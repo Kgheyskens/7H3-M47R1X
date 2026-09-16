@@ -112,9 +112,9 @@ Run `/setup` in your server.
 |---|---|---|
 | 1 | Menu → **Welcome message** → enable, pick a channel, edit the message | Overview shows ✅ |
 | 2 | Menu → **Goodbye message** → same | Overview shows ✅ |
-| 3 | Menu → **Rules** → set a channel, write the text, enable the accept button, pick the role it grants, **Post rules message** | The message appears in the channel with an **I agree** button |
+| 3 | Menu → **Rules** → set a channel, write the text (across up to 3 modal fields if it's long — see Stage 5b), enable the accept button, pick the role it grants, **Post rules message** | The message appears in the channel with an **I agree** button |
 | 4 | Menu → **Ranks & agents** → **Create default ranks**, then **Create default agents** | Check **Server Settings → Roles** — 25 rank roles (Iron 1 → Radiant, 3 divisions per tier except Radiant) and the full *current* agent roster (fetched live) now exist |
-| 5 | Pick a roles panel channel → **Post role panel** | A message with a rank select menu and one select menu per agent class appears |
+| 5 | Pick a roles panel channel → **Post role panel** | 5 separate messages appear: one with a rank select menu, and one per agent class with that class's select menu |
 | 6 | **Finish setup** | Green "Setup complete" panel |
 
 Now check the terminal: `Deployed 3 command(s) to guild <id> (setup complete).`
@@ -139,10 +139,28 @@ In Discord, type `/` again — `/roles` and `/agent` should now appear alongside
 
 ---
 
+## Stage 5b — Long rules text
+
+1. `/setup` → **Rules** → **Edit rules text** → paste something over 4000 characters into
+   the first field (e.g. copy-paste a long paragraph repeated a few times) — it fills that
+   field and the rest overflows into the second/third field automatically if you re-open the
+   editor with existing long text; when typing fresh, just keep typing past 4000 into the
+   second field yourself.
+2. Submit → **Post rules message** → the full text appears, split across multiple embeds in
+   the *same* message if it's long enough to need it (Discord caps a single embed at 4096
+   characters). Nothing is truncated or rejected.
+3. Re-open **Edit rules text** → the existing long text is pre-filled back across the 3
+   fields, not just the first 4000 characters of it.
+
+---
+
 ## Stage 6 — Welcome and goodbye
 
 1. Have a second account join the server → the welcome message appears in the configured
-   channel with placeholders filled in.
+   channel with placeholders filled in, and `{membercount}` matches the server's **human**
+   member count (check Discord's member list, or subtract however many bots you have from
+   the total member count shown in Server Settings) — not the raw total, which would include
+   this bot itself and any other bots/apps in the server.
 2. Have that account leave → the goodbye message appears.
 3. Disable welcome in `/setup` → re-join → nothing is posted.
 

@@ -15,7 +15,6 @@ const DEFAULT_CONFIG = {
     rules_accept_enabled: false,
     rules_accept_role_id: null,
     roles_panel_channel_id: null,
-    roles_panel_message_id: null,
     news_enabled: false,
     news_channel_id: null,
     news_feed_url: null,

@@ -1,6 +1,6 @@
 const { acquireLock, releaseLock } = require('./actionLock');
-const { getConfig, updateConfig } = require('./configStore');
-const { rolesPanelPayload } = require('./panelRender');
+const { getConfig } = require('./configStore');
+const rolePanel = require('./rolePanel');
 const selfRoles = require('./selfRoles');
 const { getAgentRoster } = require('./valorantApi');
 
@@ -62,12 +62,7 @@ async function announceNewAgents(guild, added) {
     const channel = await guild.channels.fetch(config.roles_panel_channel_id).catch(() => null);
     if (!channel?.isTextBased()) return;
 
-    const payload = await rolesPanelPayload(guild.id);
-    const existingMessage = config.roles_panel_message_id
-        ? await channel.messages.fetch(config.roles_panel_message_id).catch(() => null)
-        : null;
-    const message = existingMessage ? await existingMessage.edit(payload) : await channel.send(payload);
-    await updateConfig(guild.id, { roles_panel_message_id: message.id });
+    await rolePanel.postPanels(guild, channel);
 
     await channel
         .send(`🆕 New agent${added.length > 1 ? 's' : ''} added to the roster: **${added.join(', ')}** — pick ${added.length > 1 ? 'them' : 'it'} up above!`)

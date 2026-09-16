@@ -51,6 +51,17 @@ CREATE TABLE IF NOT EXISTS self_roles (
 CREATE UNIQUE INDEX IF NOT EXISTS self_roles_role_once ON self_roles (guild_id, role_id);
 CREATE INDEX IF NOT EXISTS self_roles_lookup ON self_roles (guild_id, category, sort_order);
 
+-- The role panel is several messages (one for rank, one per agent class), not one — this
+-- tracks the message id for each so re-posting edits them in place instead of duplicating.
+-- panel_key is 'rank' or 'agent:<class>'.
+CREATE TABLE IF NOT EXISTS role_panel_messages (
+    guild_id TEXT NOT NULL,
+    panel_key TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (guild_id, panel_key)
+);
+
 -- CREATE TABLE IF NOT EXISTS never adds a column to a table that already exists. guild_config
 -- has existed since the very first (Fortnite) version of this bot and has been through several
 -- shapes since — every column this bot currently reads or writes must be listed here, or a

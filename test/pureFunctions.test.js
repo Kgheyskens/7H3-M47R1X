@@ -4,8 +4,9 @@ const assert = require('node:assert/strict');
 const { formatMessage } = require('../utils/welcomeGoodbye');
 const { CLASS_ORDER, CLASSES, DEFAULT_AGENTS, DEFAULT_RANKS } = require('../utils/valorantData');
 const { mentionPayload, normalizeFeed } = require('../utils/newsFeed');
-const { boundedJoin } = require('../utils/panelRender');
+const { boundedJoin, chunkText, truncate } = require('../utils/text');
 const { acquireLock, releaseLock } = require('../utils/actionLock');
+const { rulesPayload } = require('../utils/panelRender');
 
 test('welcome/goodbye placeholders are all substituted', () => {
     const text = formatMessage('{user} joined {server}, now {membercount} members ({username}).', {
@@ -103,4 +104,48 @@ test('a lock can only be held by one caller at a time', () => {
     releaseLock('roles:g1');
     assert.equal(acquireLock('roles:g1'), true, 'releasing must free it up again');
     releaseLock('roles:g1');
+});
+
+test('truncate leaves short text alone and adds an ellipsis to long text', () => {
+    assert.equal(truncate('short', 100), 'short');
+    assert.equal(truncate('a'.repeat(20), 10), `${'a'.repeat(9)}…`);
+});
+
+test('chunkText returns a single chunk when the text already fits', () => {
+    assert.deepEqual(chunkText('short rules', 4000), ['short rules']);
+});
+
+test('chunkText splits long text on a line boundary near the limit, not mid-word', () => {
+    const text = `${'a'.repeat(9990)}\n${'b'.repeat(20)}`;
+    const chunks = chunkText(text, 10000);
+
+    assert.equal(chunks.length, 2);
+    assert.ok(chunks.every((chunk) => chunk.length <= 10000));
+    assert.equal(chunks.join('\n'), text);
+});
+
+test('chunkText hard-splits a chunk with no line breaks at all', () => {
+    const text = 'x'.repeat(9000);
+    const chunks = chunkText(text, 4000);
+
+    assert.equal(chunks.length, 3);
+    assert.equal(chunks.join(''), text);
+});
+
+test('a short rules message is a single embed with no button when accepting is off', () => {
+    const payload = rulesPayload({ rules_message: 'Be nice.', rules_accept_enabled: false });
+    assert.equal(payload.embeds.length, 1);
+    assert.equal(payload.embeds[0].toJSON().description, 'Be nice.');
+    assert.equal(payload.components.length, 0);
+});
+
+test('a rules message longer than one embed can hold is split across several embeds, and stays valid', () => {
+    const payload = rulesPayload({ rules_message: 'x'.repeat(9000), rules_accept_enabled: true });
+    assert.ok(payload.embeds.length > 1, 'must split into more than one embed');
+    for (const embed of payload.embeds) {
+        const json = embed.toJSON();
+        assert.ok(json.description.length <= 4096, 'no single embed description may exceed the Discord limit');
+    }
+    assert.equal(payload.embeds[0].toJSON().title, '📜 Server rules');
+    assert.equal(payload.components.length, 1, 'the accept button is still attached once, not per embed');
 });

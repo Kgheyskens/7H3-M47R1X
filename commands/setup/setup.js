@@ -18,12 +18,16 @@ const { acquireLock, releaseLock } = require('../../utils/actionLock');
 const { deployGuildCommands } = require('../../deploy/deployCommands');
 const { syncAgents } = require('../../utils/agentSync');
 const { ensureConfig, getConfig, updateConfig } = require('../../utils/configStore');
-const { boundedJoin, rolesPanelPayload, rulesPayload } = require('../../utils/panelRender');
+const { rulesPayload } = require('../../utils/panelRender');
+const rolePanel = require('../../utils/rolePanel');
 const { dedupeGuildRoles } = require('../../utils/roleDedupe');
 const selfRoles = require('../../utils/selfRoles');
+const { boundedJoin, truncate } = require('../../utils/text');
 const { CLASS_ORDER, CLASSES, DEFAULT_RANKS } = require('../../utils/valorantData');
 const { getAgentRoster } = require('../../utils/valorantApi');
 const { DEFAULT_GOODBYE, DEFAULT_WELCOME } = require('../../utils/welcomeGoodbye');
+
+const RULES_PART_LIMIT = 4000;
 
 function rolesLockKey(guildId) {
     return `roles:${guildId}`;
@@ -228,25 +232,87 @@ function showMessageModal(interaction, key, { title, label, maxLength, current, 
 
 async function handleMessageModal(interaction, key) {
     const message = interaction.fields.getTextInputValue('message').trim();
-    const column = key === 'rules' ? 'rules_message' : `${key}_message`;
+    const column = `${key}_message`;
     await updateConfig(interaction.guildId, { [column]: message });
 
     if (key === 'welcome') await renderWelcome(interaction);
     else if (key === 'goodbye') await renderGoodbye(interaction);
-    else if (key === 'rules') await renderRules(interaction);
 }
 
 // --- Rules -----------------------------------------------------------------
 
+/**
+ * A modal text input caps at 4000 characters — Discord's own limit, not this bot's — so a
+ * long rules document is split across up to 3 fields here and joined back together, giving
+ * up to 12000 characters. Display-side, panelRender.js splits it across multiple embeds.
+ */
+function showRulesModal(interaction, current) {
+    const parts = [
+        (current || '').slice(0, RULES_PART_LIMIT),
+        (current || '').slice(RULES_PART_LIMIT, RULES_PART_LIMIT * 2),
+        (current || '').slice(RULES_PART_LIMIT * 2, RULES_PART_LIMIT * 3),
+    ];
+
+    return interaction.showModal(
+        new ModalBuilder()
+            .setCustomId('setup:rulesmodal')
+            .setTitle('Rules text')
+            .addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('part1')
+                        .setLabel('Rules')
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true)
+                        .setMaxLength(RULES_PART_LIMIT)
+                        .setPlaceholder('Be respectful. No cheating. Have fun.')
+                        .setValue(parts[0]),
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('part2')
+                        .setLabel('Rules — continued (optional)')
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(false)
+                        .setMaxLength(RULES_PART_LIMIT)
+                        .setValue(parts[1]),
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('part3')
+                        .setLabel('Rules — continued (optional)')
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(false)
+                        .setMaxLength(RULES_PART_LIMIT)
+                        .setValue(parts[2]),
+                ),
+            ),
+    );
+}
+
+async function handleRulesModal(interaction) {
+    const combined = ['part1', 'part2', 'part3']
+        .map((id) => interaction.fields.getTextInputValue(id).trim())
+        .filter(Boolean)
+        .join('\n');
+
+    await updateConfig(interaction.guildId, { rules_message: combined });
+    await renderRules(interaction);
+}
+
 async function renderRules(interaction) {
     const config = await getConfig(interaction.guildId);
+    const rulesLength = config.rules_message?.length || 0;
 
     const embed = new EmbedBuilder()
         .setColor(0xff4655)
         .setTitle('📜 Rules')
         .addFields(
             { name: 'Channel', value: config.rules_channel_id ? `<#${config.rules_channel_id}>` : '_not set_' },
-            { name: 'Text', value: config.rules_message || '_not set yet_' },
+            {
+                name: `Text (${rulesLength} character${rulesLength === 1 ? '' : 's'})`,
+                value: config.rules_message ? truncate(config.rules_message, 1000) : '_not set yet_',
+            },
             {
                 name: `${check(config.rules_accept_enabled)} Accept button`,
                 value: config.rules_accept_role_id
@@ -372,8 +438,9 @@ async function renderRoles(interaction) {
         .setColor(0xff4655)
         .setTitle('🎮 Ranks & agents')
         .setDescription(
-            'Members self-assign these from a panel. Add ranks any time as the game evolves — new agents are ' +
-                'picked up from the live Valorant roster automatically, or press **Sync agents now**.',
+            'Members self-assign these from separate messages — one to pick a rank, one per agent class — ' +
+                'posted together with **Post role panel**. Add ranks any time as the game evolves — new agents ' +
+                'are picked up from the live Valorant roster automatically, or press **Sync agents now**.',
         )
         .addFields(
             {
@@ -536,13 +603,7 @@ async function postRolesPanel(interaction) {
         return;
     }
 
-    const payload = await rolesPanelPayload(interaction.guildId);
-    const existing = config.roles_panel_message_id
-        ? await channel.messages.fetch(config.roles_panel_message_id).catch(() => null)
-        : null;
-    const message = existing ? await existing.edit(payload) : await channel.send(payload);
-
-    await updateConfig(interaction.guildId, { roles_panel_message_id: message.id });
+    await rolePanel.postPanels(interaction.guild, channel);
     await renderRoles(interaction);
 }
 
@@ -779,20 +840,17 @@ module.exports = {
         if (action === 'roles') return renderRoles(interaction);
 
         if (action === 'editmsg') {
-            if (argument === 'newsurl') {
-                const config = await getConfig(interaction.guildId);
-                return showNewsUrlModal(interaction, config.news_feed_url);
-            }
+            const config = await getConfig(interaction.guildId);
+
+            if (argument === 'newsurl') return showNewsUrlModal(interaction, config.news_feed_url);
+            if (argument === 'rules') return showRulesModal(interaction, config.rules_message);
 
             const settings = {
                 welcome: { key: 'welcome', title: 'Welcome message', label: 'Message', maxLength: 500, placeholder: '{user} {username} {server} {membercount}' },
                 goodbye: { key: 'goodbye', title: 'Goodbye message', label: 'Message', maxLength: 500, placeholder: '{user} {username} {server} {membercount}' },
-                rules: { key: 'rules', title: 'Rules text', label: 'Rules', maxLength: 4000, placeholder: 'Be respectful. No cheating. Have fun.' },
             }[argument];
 
-            const config = await getConfig(interaction.guildId);
-            const current = argument === 'rules' ? config.rules_message : config[`${argument}_message`];
-            return showMessageModal(interaction, settings.key, { ...settings, current });
+            return showMessageModal(interaction, settings.key, { ...settings, current: config[`${argument}_message`] });
         }
 
         if (action === 'toggle') {
@@ -894,5 +952,6 @@ module.exports = {
         if (action === 'msgmodal') return handleMessageModal(interaction, argument);
         if (action === 'addmodal') return handleAddModal(interaction, argument);
         if (action === 'newsurlmodal') return handleNewsUrlModal(interaction);
+        if (action === 'rulesmodal') return handleRulesModal(interaction);
     },
 };

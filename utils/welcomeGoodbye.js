@@ -13,6 +13,17 @@ function formatMessage(template, { username, mention, guildName, memberCount }) 
         .replaceAll('{membercount}', String(memberCount));
 }
 
+/**
+ * guild.memberCount counts bots and apps too, which makes "{membercount}" read wrong for a
+ * welcome/goodbye message about the human community. The member cache is not guaranteed to
+ * be complete just because the GuildMembers intent is enabled, so this fetches the full list
+ * first — an extra API call, but this only runs once per join/leave, not on a hot path.
+ */
+async function humanMemberCount(guild) {
+    const members = await guild.members.fetch().catch(() => guild.members.cache);
+    return members.filter((member) => !member.user.bot).size;
+}
+
 async function sendWelcome(member) {
     const config = await getConfig(member.guild.id);
     if (!config.welcome_enabled || !config.welcome_channel_id) return;
@@ -24,7 +35,7 @@ async function sendWelcome(member) {
         username: member.user.username,
         mention: `${member}`,
         guildName: member.guild.name,
-        memberCount: member.guild.memberCount,
+        memberCount: await humanMemberCount(member.guild),
     });
 
     await channel
@@ -43,7 +54,7 @@ async function sendGoodbye(guild, user) {
         username: user.username,
         mention: `${user}`,
         guildName: guild.name,
-        memberCount: guild.memberCount,
+        memberCount: await humanMemberCount(guild),
     });
 
     await channel

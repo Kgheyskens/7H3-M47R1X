@@ -12,20 +12,24 @@ an optional news feed.
 1. **Setup** — an administrator runs `/setup`. Until that wizard is finished, `/setup` is
    the *only* command the server has. Finishing it deploys every other command.
 2. **Welcome & goodbye** — turn each on, pick a channel, and write a message. Placeholders
-   `{user}`, `{username}`, `{server}` and `{membercount}` get filled in automatically.
-3. **Rules** — write the rules text and post it. Optionally require members to press
-   **I agree** before they get a role — a simple gate for the rest of the server.
+   `{user}`, `{username}`, `{server}` and `{membercount}` get filled in automatically —
+   `{membercount}` counts only human members, not bots/apps.
+3. **Rules** — write the rules text (as long as you need — see below) and post it.
+   Optionally require members to press **I agree** before they get a role — a simple gate
+   for the rest of the server.
 4. **Ranks & agents** — create the standard rank ladder (Iron 1 → Radiant, 3 divisions per
    tier except Radiant — 25 roles, exactly Discord's per-menu limit) and the full agent
    roster with one click each, grouped by class (Duelist, Controller, Initiator, Sentinel).
    Add or remove individual ranks any time — useful whenever Riot changes the tier list.
-   Post the panel and members pick their own rank and every agent they main from select
-   menus.
+   **Post role panel** posts one message to pick a rank and one more per agent class (up to
+   5 separate messages total) so each choice reads clearly instead of one crowded message —
+   members pick their rank and every agent they main from select menus.
 5. **Agents stay current on their own** — the agent roster is pulled from the live
    [valorant-api.com](https://valorant-api.com) agent list, not a hardcoded snapshot. Every
    12 hours (and once at startup) the bot checks for any agent that doesn't have a role yet,
-   creates it, updates the posted panel in place, and drops a "new agent added" note in the
-   panel channel. A **Sync agents now** button in `/setup` does the same thing on demand.
+   creates it, updates the relevant panel message in place, and drops a "new agent added"
+   note in the panel channel. A **Sync agents now** button in `/setup` does the same thing
+   on demand.
 6. **News feed** — point the bot at any RSS or Atom feed (official Valorant news, a fan
    site, esports coverage, whatever) and it posts new articles to a channel every 15
    minutes, with an optional role ping on the first article of each batch.
@@ -128,9 +132,20 @@ utils/
   newsFeed.js                ← generic RSS/Atom feed poster
   actionLock.js              ← per-guild mutex so a double-click can't create duplicate roles
   roleDedupe.js              ← merges roles that already got duplicated back to one
+  rolePanel.js               ← posts/edits the separate rank + per-class agent messages
+  text.js                    ← boundedJoin / chunkText / truncate string helpers
 test/                        ← node:test suites
 scripts/                     ← doctor, smoke test, SQL validator
 ```
+
+### Long rules text
+
+A single Discord modal field caps at 4000 characters — that's Discord's own limit, not this
+bot's. The rules editor in `/setup` uses 3 such fields (so up to 12,000 characters of input),
+joined back together and stored as one string with no length limit of its own. On the
+display side, an embed description caps at 4096 characters, so `panelRender.js` splits long
+rules text across multiple embeds in the same message (up to 10 are allowed) rather than
+truncating it.
 
 ### Duplicate roles
 
