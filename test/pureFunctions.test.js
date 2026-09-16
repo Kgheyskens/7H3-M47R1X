@@ -4,6 +4,8 @@ const assert = require('node:assert/strict');
 const { formatMessage } = require('../utils/welcomeGoodbye');
 const { CLASS_ORDER, CLASSES, DEFAULT_AGENTS, DEFAULT_RANKS } = require('../utils/valorantData');
 const { mentionPayload, normalizeFeed } = require('../utils/newsFeed');
+const { boundedJoin } = require('../utils/panelRender');
+const { acquireLock, releaseLock } = require('../utils/actionLock');
 
 test('welcome/goodbye placeholders are all substituted', () => {
     const text = formatMessage('{user} joined {server}, now {membercount} members ({username}).', {
@@ -81,4 +83,24 @@ test('only the first message in a batch carries a ping', () => {
     assert.deepEqual(mentionPayload('123', true), { content: '<@&123>', allowedMentions: { roles: ['123'] } });
     assert.deepEqual(mentionPayload('123', false), { allowedMentions: { parse: [] } });
     assert.deepEqual(mentionPayload(null, true), { allowedMentions: { parse: [] } });
+});
+
+test('boundedJoin stays under the limit and lists everything when it fits', () => {
+    assert.equal(boundedJoin(['A', 'B', 'C']), 'A, B, C');
+    assert.equal(boundedJoin([]), '');
+});
+
+test('boundedJoin truncates and reports how many were left out, so a long list cannot overflow a Discord embed field', () => {
+    const labels = Array.from({ length: 100 }, (_, i) => `Agent${i}`);
+    const result = boundedJoin(labels, 50);
+    assert.ok(result.length <= 50 + 20, 'the result must stay close to the requested limit');
+    assert.match(result, /…and \d+ more$/);
+});
+
+test('a lock can only be held by one caller at a time', () => {
+    assert.equal(acquireLock('roles:g1'), true);
+    assert.equal(acquireLock('roles:g1'), false, 'a second acquire while held must fail');
+    releaseLock('roles:g1');
+    assert.equal(acquireLock('roles:g1'), true, 'releasing must free it up again');
+    releaseLock('roles:g1');
 });

@@ -1,11 +1,12 @@
 const { EmbedBuilder, SlashCommandBuilder } = require('discord.js');
 
-const { CLASSES, DEFAULT_AGENTS } = require('../../utils/valorantData');
+const selfRoles = require('../../utils/selfRoles');
+const { CLASSES } = require('../../utils/valorantData');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('agent')
-        .setDescription("Can't decide who to lock in? Get a random agent suggestion.")
+        .setDescription("Can't decide who to lock in? Get a random suggestion from the agents you main.")
         .setDMPermission(false)
         .addStringOption((option) =>
             option
@@ -16,14 +17,27 @@ module.exports = {
 
     async execute(interaction) {
         const classKey = interaction.options.getString('class');
-        const pool = classKey ? DEFAULT_AGENTS.filter((agent) => agent.group === classKey) : DEFAULT_AGENTS;
-        const pick = pool[Math.floor(Math.random() * pool.length)];
-        const meta = CLASSES[pick.group];
+        const agents = await selfRoles.getRoles(interaction.guildId, 'agent');
+        const mine = agents.filter(
+            (agent) => interaction.member.roles.cache.has(agent.role_id) && (!classKey || agent.group_name === classKey),
+        );
+
+        if (!mine.length) {
+            const scope = classKey ? `${CLASSES[classKey].label} ` : '';
+            await interaction.reply({
+                content: `You haven't picked any ${scope}agents yet — grab some from the role panel first, then try again.`,
+                ephemeral: true,
+            });
+            return;
+        }
+
+        const pick = mine[Math.floor(Math.random() * mine.length)];
+        const meta = CLASSES[pick.group_name];
 
         await interaction.reply({
             embeds: [
                 new EmbedBuilder()
-                    .setColor(pick.color)
+                    .setColor(0xff4655)
                     .setTitle('🎲 Lock in:')
                     .setDescription(`**${pick.label}** — ${meta.emoji} ${meta.label}`),
             ],

@@ -118,8 +118,10 @@ In Discord, type `/` again — `/roles` and `/agent` should now appear alongside
 3. Pick two or three agents from one class's select menu → you get exactly those roles.
    Deselect one → it's removed, the others stay.
 4. `/roles` → shows your current rank and agent pool.
-5. `/agent` and `/agent class:Sentinel` → a random suggestion, restricted to the class when
-   given.
+5. `/agent` before picking any agents → tells you to grab some from the panel first, instead
+   of guessing. Pick two or three agents, then `/agent` again → only ever suggests one of
+   those, never an agent you don't have. `/agent class:Sentinel` when you have none in that
+   class → same "none picked yet" message, scoped to that class.
 
 ---
 
@@ -143,6 +145,21 @@ Ranks and agents don't have to be the defaults forever:
    `/setup` server can have more agents than fit in one dropdown.
 4. Re-post the role panel to pick up the change — editing in place reuses the same message,
    so it won't spam a new one into the channel each time.
+
+---
+
+## Stage 7b — Duplicate roles cannot happen, and can be cleaned up if they already did
+
+1. In **Ranks & agents**, click **Create default ranks** and immediately click it again
+   before the first click finishes rendering → the second click gets "Already working on
+   your role roster from another click", and only one set of roles is created. This is the
+   lock in `utils/actionLock.js` doing its job — it's what actually prevents the double-role
+   bug, so it's worth confirming here rather than trusting it silently.
+2. If you already have duplicates from before this fix: open **Ranks & agents** → a
+   "⚠️ Duplicates found" field appears and **Clean up duplicates** lights up red. Press it →
+   check **Server Settings → Roles**, each duplicated name is down to one role, and any
+   member who had the deleted copy now has the surviving one instead.
+3. Press **Clean up duplicates** again with nothing left to merge → "No duplicates found."
 
 ---
 
@@ -189,6 +206,8 @@ New agents get their own role automatically — no admin action required in norm
 | Commands do not appear at all | `DISCORD_CLIENT_ID` missing or wrong |
 | No welcome/goodbye message | The feature is disabled, or no channel is set, in `/setup` |
 | "Create default agents" creates fewer roles than expected, or stops partway | Check the terminal — it now logs and skips any single role that fails to create instead of aborting the batch, so a partial result means specific roles failed (usually a permission blip); re-run the button, it only creates what's still missing |
+| Duplicate rank/agent roles | Should no longer happen (see Stage 7b) — if you have leftovers from before this fix, use **Clean up duplicates** in `/setup` → Ranks & agents |
+| "Something went wrong while performing this action" opening Ranks & agents | Was caused by a very long duplicated role list overflowing an embed field; fixed by bounding the list length and by the dedupe tool above — update and clean up duplicates if you still see this |
 | No news posts ever appear | Feed URL is wrong/unreachable (check `npm run doctor` output and the terminal), or it just had its first run (see Stage 9) |
 | Everything 500s | Run `npm run doctor` — usually the database |
 | Bot goes offline after inactivity on Render | Point an UptimeRobot monitor at the service's public URL |

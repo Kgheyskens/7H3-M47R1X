@@ -14,14 +14,20 @@ const {
     TextInputStyle,
 } = require('discord.js');
 
+const { acquireLock, releaseLock } = require('../../utils/actionLock');
 const { deployGuildCommands } = require('../../deploy/deployCommands');
 const { syncAgents } = require('../../utils/agentSync');
 const { ensureConfig, getConfig, updateConfig } = require('../../utils/configStore');
-const { rolesPanelPayload, rulesPayload } = require('../../utils/panelRender');
+const { boundedJoin, rolesPanelPayload, rulesPayload } = require('../../utils/panelRender');
+const { dedupeGuildRoles } = require('../../utils/roleDedupe');
 const selfRoles = require('../../utils/selfRoles');
 const { CLASS_ORDER, CLASSES, DEFAULT_RANKS } = require('../../utils/valorantData');
 const { getAgentRoster } = require('../../utils/valorantApi');
 const { DEFAULT_GOODBYE, DEFAULT_WELCOME } = require('../../utils/welcomeGoodbye');
+
+function rolesLockKey(guildId) {
+    return `roles:${guildId}`;
+}
 
 const CHANNEL_FIELDS = {
     welcome: { column: 'welcome_channel_id', label: 'Welcome channel' },
@@ -347,10 +353,20 @@ async function renderNews(interaction) {
 
 // --- Ranks & agents ----------------------------------------------------------
 
+function countDuplicateLabels(rows) {
+    const seen = new Map();
+    for (const row of rows) {
+        const key = `${row.category}:${row.label.toLowerCase()}`;
+        seen.set(key, (seen.get(key) || 0) + 1);
+    }
+    return [...seen.values()].filter((count) => count > 1).length;
+}
+
 async function renderRoles(interaction) {
     const config = await getConfig(interaction.guildId);
     const ranks = await selfRoles.getRoles(interaction.guildId, 'rank');
     const agents = await selfRoles.getRoles(interaction.guildId, 'agent');
+    const duplicateGroups = countDuplicateLabels([...ranks, ...agents]);
 
     const embed = new EmbedBuilder()
         .setColor(0xff4655)
@@ -362,20 +378,27 @@ async function renderRoles(interaction) {
         .addFields(
             {
                 name: `Ranks (${ranks.length})`,
-                value: ranks.length ? ranks.map((rank) => `<@&${rank.role_id}>`).join(', ') : '_none yet_',
+                value: ranks.length ? boundedJoin(ranks.map((rank) => rank.label)) : '_none yet_',
             },
             {
                 name: `Agents (${agents.length})`,
                 value: CLASS_ORDER.map((key) => {
                     const inClass = agents.filter((agent) => agent.group_name === key);
                     if (!inClass.length) return null;
-                    return `${CLASSES[key].emoji} **${CLASSES[key].label}** — ${inClass.map((agent) => `<@&${agent.role_id}>`).join(', ')}`;
+                    return `${CLASSES[key].emoji} **${CLASSES[key].label}** — ${boundedJoin(inClass.map((agent) => agent.label), 220)}`;
                 })
                     .filter(Boolean)
                     .join('\n') || '_none yet_',
             },
             { name: 'Panel channel', value: config.roles_panel_channel_id ? `<#${config.roles_panel_channel_id}>` : '_not set_' },
         );
+
+    if (duplicateGroups) {
+        embed.addFields({
+            name: '⚠️ Duplicates found',
+            value: `${duplicateGroups} name(s) have more than one role. Press **Clean up duplicates** to merge them.`,
+        });
+    }
 
     await respond(interaction, {
         embeds: [embed],
@@ -417,6 +440,12 @@ async function renderRoles(interaction) {
                     .setStyle(ButtonStyle.Success)
                     .setEmoji('📤')
                     .setDisabled(!config.roles_panel_channel_id || (!ranks.length && !agents.length)),
+                new ButtonBuilder()
+                    .setCustomId('setup:dedupe')
+                    .setLabel('Clean up duplicates')
+                    .setStyle(duplicateGroups ? ButtonStyle.Danger : ButtonStyle.Secondary)
+                    .setEmoji('🧹')
+                    .setDisabled(!duplicateGroups),
                 new ButtonBuilder().setCustomId('setup:back').setLabel('Back').setStyle(ButtonStyle.Secondary),
             ),
         ],
@@ -467,12 +496,27 @@ async function createDefaultRoles(interaction, category, defaults) {
 }
 
 async function syncAgentsNow(interaction) {
-    await interaction.deferUpdate();
-    const { added } = await syncAgents(interaction.guild);
+    const { added, locked } = await syncAgents(interaction.guild);
     await renderRoles(interaction);
 
     await interaction.followUp({
-        content: added.length ? `Added ${added.length} new agent(s): ${added.join(', ')}.` : 'Everyone is already up to date — no new agents.',
+        content: locked
+            ? 'Already syncing the roster in the background — try again in a moment.'
+            : added.length
+              ? `Added ${added.length} new agent(s): ${added.join(', ')}.`
+              : 'Everyone is already up to date — no new agents.',
+        ephemeral: true,
+    });
+}
+
+async function cleanupDuplicates(interaction) {
+    const { rolesRemoved, membersMigrated, labels } = await dedupeGuildRoles(interaction.guild);
+    await renderRoles(interaction);
+
+    await interaction.followUp({
+        content: rolesRemoved
+            ? `Removed ${rolesRemoved} duplicate role(s) (${[...new Set(labels)].join(', ')}) and moved ${membersMigrated} member(s) onto the surviving role.`
+            : 'No duplicates found.',
         ephemeral: true,
     });
 }
@@ -578,9 +622,21 @@ async function handleAddModal(interaction, category) {
         }
     }
 
+    const lockKey = rolesLockKey(interaction.guildId);
+    if (!acquireLock(lockKey)) {
+        await interaction.reply({ content: 'Already working on your role roster — try again in a moment.', ephemeral: true });
+        return;
+    }
+
     await interaction.deferReply({ ephemeral: true });
 
     try {
+        const existing = await selfRoles.getRoles(interaction.guildId, category);
+        if (existing.some((row) => row.label.toLowerCase() === name.toLowerCase())) {
+            await interaction.editReply(`**${name}** already exists — nothing was created.`);
+            return;
+        }
+
         const role = await interaction.guild.roles.create({
             name,
             hoist: category === 'rank',
@@ -593,6 +649,8 @@ async function handleAddModal(interaction, category) {
     } catch (error) {
         console.error(`Could not create the ${category} role "${name}" in guild ${interaction.guildId}:`, error.message);
         await interaction.editReply(`Could not create the role for **${name}**. Check the bot's **Manage Roles** permission and try again.`);
+    } finally {
+        releaseLock(lockKey);
     }
 }
 
@@ -739,16 +797,31 @@ module.exports = {
         if (action === 'postrules') return postRules(interaction);
         if (action === 'postrolespanel') return postRolesPanel(interaction);
 
-        if (action === 'rankdefaults') {
+        if (action === 'agentsync') {
             await interaction.deferUpdate();
-            return createDefaultRoles(interaction, 'rank', DEFAULT_RANKS);
+            return syncAgentsNow(interaction);
         }
-        if (action === 'agentdefaults') {
-            await interaction.deferUpdate();
-            const roster = await getAgentRoster();
-            return createDefaultRoles(interaction, 'agent', roster);
+
+        if (['rankdefaults', 'agentdefaults', 'dedupe'].includes(action)) {
+            const lockKey = rolesLockKey(interaction.guildId);
+            if (!acquireLock(lockKey)) {
+                await interaction.reply({
+                    content: 'Already working on your role roster from another click — give it a few seconds.',
+                    ephemeral: true,
+                });
+                return;
+            }
+
+            try {
+                await interaction.deferUpdate();
+                if (action === 'rankdefaults') await createDefaultRoles(interaction, 'rank', DEFAULT_RANKS);
+                else if (action === 'agentdefaults') await createDefaultRoles(interaction, 'agent', await getAgentRoster());
+                else if (action === 'dedupe') await cleanupDuplicates(interaction);
+            } finally {
+                releaseLock(lockKey);
+            }
+            return;
         }
-        if (action === 'agentsync') return syncAgentsNow(interaction);
 
         if (action === 'rankadd') return showAddModal(interaction, 'rank');
         if (action === 'agentadd') return showAddModal(interaction, 'agent');

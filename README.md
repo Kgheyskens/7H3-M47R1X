@@ -29,7 +29,9 @@ an optional news feed.
    site, esports coverage, whatever) and it posts new articles to a channel every 15
    minutes, with an optional role ping on the first article of each batch.
 7. **`/roles`** — a member can check what they currently have picked.
-8. **`/agent`** — a random-agent roulette for when nobody can decide who to lock in.
+8. **`/agent`** — rolls a random pick from *the agents that member has selected* on the
+   panel, not the whole roster — it never suggests an agent they don't main. If they haven't
+   picked any yet (optionally within the given class), it says so instead of guessing.
 
 ---
 
@@ -112,20 +114,32 @@ app.js                       ← client, HTTP server, event wiring
 deploy/deployCommands.js     ← setup-gated command registration
 commands/setup/setup.js      ← the configuration wizard
 commands/roles/roles.js      ← self-assign role interactions (`/roles` + the panels)
-commands/agent/agent.js      ← `/agent` random-agent roulette
+commands/agent/agent.js      ← `/agent` random pick from your own agents
 utils/
   db.js                      ← single shared pool + schema
   configStore.js             ← per-guild settings
   selfRoles.js               ← rank/agent role CRUD
   welcomeGoodbye.js          ← welcome/goodbye message sending
-  panelRender.js             ← rules message + roles panel embeds/components
+  panelRender.js             ← rules message + roles panel embeds/components (length-bounded)
   valorantData.js            ← default rank ladder + offline agent fallback
   valorantApi.js             ← live agent roster from valorant-api.com
   agentSync.js               ← creates roles for newly released agents
   newsFeed.js                ← generic RSS/Atom feed poster
+  actionLock.js              ← per-guild mutex so a double-click can't create duplicate roles
+  roleDedupe.js              ← merges roles that already got duplicated back to one
 test/                        ← node:test suites
 scripts/                     ← doctor, smoke test, SQL validator
 ```
+
+### Duplicate roles
+
+Clicking a bulk role-creation button twice in quick succession (or Discord redelivering a
+slow interaction) used to be able to create the same rank or agent role twice, since both
+clicks would see the "not created yet" state at the same time. `actionLock.js` now
+serializes every bulk role action per guild, `roleDedupe.js` prevents new duplicates from
+outrunning the same-name check, and **Clean up duplicates** in `/setup` → Ranks & agents
+retroactively merges any that already exist — the oldest role survives, members on a
+duplicate are moved onto it, and the extra roles are deleted.
 
 Component `customId`s follow `<commandName>:<action>[:<arg>]`. The first segment must
 match a registered command name — that is how interactions are routed. Panels posted by
