@@ -7,10 +7,7 @@ const { Client, Collection, Events, GatewayIntentBits } = require('discord.js');
 
 const { clearGlobalCommands, deployGuildCommands } = require('./deploy/deployCommands');
 const { ensureConfig, isSetupCompleted } = require('./utils/configStore');
-const { refreshAllBoards } = require('./utils/leaderboards');
-const { refreshAllShops } = require('./utils/fortniteShop');
-const { refreshAllNews } = require('./utils/fortniteNews');
-const createDashboardHandler = require('./utils/dashboard');
+const { sendGoodbye, sendWelcome } = require('./utils/welcomeGoodbye');
 
 const BOT_TOKEN = process.env.DISCORD_TOKEN || process.env.CLIENT_TOKEN;
 
@@ -41,16 +38,16 @@ for (const folder of fs.readdirSync(COMMANDS_DIRECTORY)) {
     }
 }
 
-const dashboardHandler = createDashboardHandler(client);
+// Render's free/hobby tiers spin the service down after idle, and UptimeRobot needs
+// something to ping to keep it awake — this is that endpoint.
 const PORT = process.env.PORT || 3000;
 
-http.createServer(async (req, res) => dashboardHandler(req, res)).listen(PORT, () => {
-    console.log(`HTTP server listening on port ${PORT}; dashboard: /admin`);
+http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('OK');
+}).listen(PORT, () => {
+    console.log(`HTTP server listening on port ${PORT} for uptime pings.`);
 });
-
-const REFRESH_BOARDS_MS = 60 * 1000;
-const REFRESH_SHOP_MS = 15 * 60 * 1000;
-const REFRESH_NEWS_MS = 10 * 60 * 1000;
 
 client.once(Events.ClientReady, async (readyClient) => {
     console.log(`Ready! Logged in as ${readyClient.user.tag}`);
@@ -65,24 +62,6 @@ client.once(Events.ClientReady, async (readyClient) => {
             console.error(`Could not initialise guild ${guild.id}:`, error.message);
         }
     }
-
-    refreshAllBoards(readyClient).catch((error) => console.error('Initial board refresh failed:', error.message));
-    refreshAllShops(readyClient).catch((error) => console.error('Initial shop refresh failed:', error.message));
-    refreshAllNews(readyClient).catch((error) => console.error('Initial news refresh failed:', error.message));
-
-    setInterval(() => {
-        refreshAllBoards(readyClient).catch((error) =>
-            console.error('Scheduled board refresh failed:', error.message),
-        );
-    }, REFRESH_BOARDS_MS);
-
-    setInterval(() => {
-        refreshAllShops(readyClient).catch((error) => console.error('Scheduled shop refresh failed:', error.message));
-    }, REFRESH_SHOP_MS);
-
-    setInterval(() => {
-        refreshAllNews(readyClient).catch((error) => console.error('Scheduled news refresh failed:', error.message));
-    }, REFRESH_NEWS_MS);
 });
 
 client.on(Events.GuildCreate, async (guild) => {
@@ -93,6 +72,14 @@ client.on(Events.GuildCreate, async (guild) => {
     } catch (error) {
         console.error(`Could not prepare guild ${guild.id}:`, error.message);
     }
+});
+
+client.on(Events.GuildMemberAdd, (member) => {
+    sendWelcome(member).catch((error) => console.error('Welcome message failed:', error.message));
+});
+
+client.on(Events.GuildMemberRemove, (member) => {
+    sendGoodbye(member.guild, member.user).catch((error) => console.error('Goodbye message failed:', error.message));
 });
 
 /**

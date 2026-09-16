@@ -1,22 +1,20 @@
 {
-  "name": "fortnite-tournament-bot",
+  "name": "valorant-community-bot",
   "version": "1.0.0",
-  "description": "Fortnite tournament Discord bot with AI screenshot verification",
+  "description": "Valorant community Discord bot: welcome/goodbye messages, rules, and self-assign rank & agent roles",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
     "test": "node --test",
     "doctor": "node scripts/doctor.js",
-    "smoke": "node scripts/smoke-dashboard.js",
-    "smoke:flow": "node scripts/smoke-flow.js",
+    "smoke": "node scripts/smoke-flow.js",
     "validate-sql": "node scripts/validate-sql.js"
   },
   "engines": {
     "node": "22.x"
   },
   "dependencies": {
-    "axios": "^1.7.7",
     "discord.js": "^14.16.3",
     "dotenv": "^16.4.5",
     "pg": "^8.13.1"

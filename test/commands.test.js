@@ -17,7 +17,7 @@ function loadCommands() {
 
 test('every command module exposes data and execute', () => {
     const commands = loadCommands();
-    assert.ok(commands.length >= 7);
+    assert.ok(commands.length >= 3);
     for (const command of commands) {
         assert.ok(command.data, 'a command is missing its builder');
         assert.equal(typeof command.execute, 'function');
@@ -25,11 +25,16 @@ test('every command module exposes data and execute', () => {
 });
 
 test('admin commands are hidden from non-administrators', () => {
-    const adminOnly = new Set(['setup', 'review', 'admin-submit']);
+    const adminOnly = new Set(['setup']);
+    const memberFacing = new Set(['roles', 'agent']);
+
     for (const command of loadCommands()) {
         const json = command.data.toJSON();
         if (adminOnly.has(json.name)) {
             assert.equal(json.default_member_permissions, '8', `${json.name} must be hidden from non-administrators`);
+        }
+        if (memberFacing.has(json.name)) {
+            assert.notEqual(json.default_member_permissions, '8', `${json.name} must stay visible to members`);
         }
     }
 });

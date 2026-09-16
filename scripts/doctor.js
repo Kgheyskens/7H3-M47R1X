@@ -87,23 +87,7 @@ async function checkDatabase() {
              WHERE table_schema = 'public' ORDER BY table_name`,
         );
 
-        const expected = [
-            'admin_login_attempts',
-            'admin_sessions',
-            'fortnite_news_feeds',
-            'fortnite_shop_panels',
-            'guild_config',
-            'live_boards',
-            'moderation_logs',
-            'registrations',
-            'submissions',
-            'team_members',
-            'team_panels',
-            'teams',
-            'tournament_regions',
-            'tournaments',
-        ];
-
+        const expected = ['guild_config', 'self_roles'];
         const found = new Set(tables.rows.map((row) => row.table_name));
         const missing = expected.filter((name) => !found.has(name));
 
@@ -116,55 +100,14 @@ async function checkDatabase() {
     }
 }
 
-async function checkAi() {
-    const providers = [
-        ['OpenRouter', process.env.OPENROUTER_API_KEY],
-        ['Groq', process.env.GROQ_API_KEY],
-        ['Gemini', process.env.GEMINI_API_KEY],
-    ].filter(([, key]) => key);
-
-    if (!providers.length) {
-        warn('AI verification', 'no provider key set — every submission goes to manual review');
-        return;
-    }
-
-    pass('AI verification', `${providers.map(([name]) => name).join(', ')} configured`);
-}
-
-async function checkDashboard() {
-    if (!process.env.ADMIN_DASHBOARD_TOKEN) {
-        warn('ADMIN_DASHBOARD_TOKEN', 'missing — the web dashboard cannot be signed into');
-    } else if (process.env.ADMIN_DASHBOARD_TOKEN.length < 12) {
-        warn('ADMIN_DASHBOARD_TOKEN', 'shorter than 12 characters — use something longer');
-    } else {
-        pass('ADMIN_DASHBOARD_TOKEN', 'set');
-    }
-
-    if (!process.env.DASHBOARD_URL) {
-        warn('DASHBOARD_URL', 'not set — /review dashboard cannot show a link (fine for local testing)');
-    } else {
-        pass('DASHBOARD_URL', process.env.DASHBOARD_URL);
-    }
-
+async function checkHosting() {
     if (process.env.NODE_ENV !== 'production') {
-        warn('NODE_ENV', 'not "production" — session cookies are sent without the Secure flag');
+        warn('NODE_ENV', 'not "production" — fine locally, but set this on Render');
     } else {
         pass('NODE_ENV', 'production');
     }
-}
 
-async function checkFortnite() {
-    try {
-        const response = await fetch('https://fortnite-api.com/v2/aes', { signal: AbortSignal.timeout(10000) });
-        if (response.ok) {
-            const data = await response.json();
-            pass('Fortnite API', `reachable (build ${data?.data?.build ?? 'unknown'})`);
-        } else {
-            warn('Fortnite API', `responded with HTTP ${response.status}`);
-        }
-    } catch (error) {
-        warn('Fortnite API', `unreachable: ${error.message}`);
-    }
+    pass('Uptime endpoint', `serves "OK" on port ${process.env.PORT || 3000} at "/" — point UptimeRobot at it`);
 }
 
 (async () => {
@@ -173,9 +116,7 @@ async function checkFortnite() {
     await checkNode();
     await checkDiscord();
     await checkDatabase();
-    await checkAi();
-    await checkDashboard();
-    await checkFortnite();
+    await checkHosting();
 
     const icons = { pass: '✓', warn: '!', fail: '✗' };
     const width = Math.max(...results.map((r) => r.label.length));

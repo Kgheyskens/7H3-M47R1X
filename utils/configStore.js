@@ -3,21 +3,19 @@ const { query } = require('./db');
 const DEFAULT_CONFIG = {
     setup_completed: false,
     setup_step: null,
-    announcement_channel_id: null,
-    submission_channel_id: null,
-    leaderboard_channel_id: null,
-    team_panel_channel_id: null,
-    shop_channel_id: null,
-    news_channel_id: null,
-    news_mention_role_id: null,
-    staff_role_id: null,
-    shop_enabled: false,
-    news_enabled: false,
-    ai_enabled: true,
-    player_submissions_enabled: true,
-    team_switching_allowed: false,
-    points_per_kill: 1,
-    points_per_win: 10,
+    welcome_enabled: false,
+    welcome_channel_id: null,
+    welcome_message: null,
+    goodbye_enabled: false,
+    goodbye_channel_id: null,
+    goodbye_message: null,
+    rules_channel_id: null,
+    rules_message: null,
+    rules_message_id: null,
+    rules_accept_enabled: false,
+    rules_accept_role_id: null,
+    roles_panel_channel_id: null,
+    roles_panel_message_id: null,
 };
 
 const UPDATABLE_FIELDS = new Set(Object.keys(DEFAULT_CONFIG));
@@ -62,31 +60,10 @@ async function isSetupCompleted(guildId) {
     return Boolean(result.rows[0]?.setup_completed);
 }
 
-async function getConfiguredGuildIds() {
-    const result = await query('SELECT guild_id FROM guild_config WHERE setup_completed = TRUE');
-    return result.rows.map((row) => row.guild_id);
-}
-
-/**
- * Setup is only complete once a guild can actually run a tournament: at least two
- * teams to compete, and a channel to review submissions in.
- */
-function missingRequirements(config, teamCount) {
-    const missing = [];
-    if (teamCount < 2) missing.push('At least two teams');
-    if (!config.submission_channel_id) missing.push('Submission channel');
-    if (!config.leaderboard_channel_id) missing.push('Leaderboard channel');
-    if (config.shop_enabled && !config.shop_channel_id) missing.push('Item shop channel');
-    if (config.news_enabled && !config.news_channel_id) missing.push('News channel');
-    return missing;
-}
-
 module.exports = {
     DEFAULT_CONFIG,
     ensureConfig,
     getConfig,
-    getConfiguredGuildIds,
     isSetupCompleted,
-    missingRequirements,
     updateConfig,
 };

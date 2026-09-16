@@ -15,143 +15,29 @@ const {
 } = require('discord.js');
 
 const { deployGuildCommands } = require('../../deploy/deployCommands');
-const { ensureConfig, getConfig, missingRequirements, updateConfig } = require('../../utils/configStore');
-const { clearNewsFeed, setNewsFeed } = require('../../utils/fortniteNews');
-const { clearShopPanel, setShopPanel } = require('../../utils/fortniteShop');
-const teamStore = require('../../utils/teamStore');
+const { ensureConfig, getConfig, updateConfig } = require('../../utils/configStore');
+const { rolesPanelPayload, rulesPayload } = require('../../utils/panelRender');
+const selfRoles = require('../../utils/selfRoles');
+const { CLASS_ORDER, CLASSES, DEFAULT_AGENTS, DEFAULT_RANKS } = require('../../utils/valorantData');
+const { DEFAULT_GOODBYE, DEFAULT_WELCOME } = require('../../utils/welcomeGoodbye');
 
 const CHANNEL_FIELDS = {
-    submission: {
-        column: 'submission_channel_id',
-        label: 'Submission review channel',
-        hint: 'Where new match submissions are announced for staff.',
-    },
-    leaderboard: {
-        column: 'leaderboard_channel_id',
-        label: 'Leaderboard channel',
-        hint: 'Where the live team and player boards are posted.',
-    },
-    announcement: {
-        column: 'announcement_channel_id',
-        label: 'Announcement channel',
-        hint: 'Where tournaments and creator codes are announced.',
-    },
-    teampanel: {
-        column: 'team_panel_channel_id',
-        label: 'Team join channel',
-        hint: 'Where members pick their team.',
-    },
-    shop: { column: 'shop_channel_id', label: 'Item shop channel', hint: 'Where the daily item shop is posted.' },
-    news: { column: 'news_channel_id', label: 'News channel', hint: 'Where Fortnite news and updates are posted.' },
+    welcome: { column: 'welcome_channel_id', label: 'Welcome channel' },
+    goodbye: { column: 'goodbye_channel_id', label: 'Goodbye channel' },
+    rules: { column: 'rules_channel_id', label: 'Rules channel' },
+    rolespanel: { column: 'roles_panel_channel_id', label: 'Roles panel channel' },
 };
-
-const TEAM_COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xe91e63];
 
 function check(value) {
     return value ? '✅' : '⬜';
 }
 
-function channelLine(key, config) {
-    const field = CHANNEL_FIELDS[key];
-    const value = config[field.column];
-    return `${check(value)} **${field.label}** — ${value ? `<#${value}>` : '_not set_'}`;
+function requireAdministrator(interaction) {
+    return interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
 }
 
-function feedTarget(enabled, channelId) {
-    if (!enabled) return '_disabled_';
-    return channelId ? `<#${channelId}>` : '_no channel selected_';
-}
-
-async function overviewEmbed(guild) {
-    const config = await getConfig(guild.id);
-    const teams = await teamStore.getTeams(guild.id);
-    const missing = missingRequirements(config, teams.length);
-
-    const teamList = teams.length
-        ? teams.map((team) => `<@&${team.role_id}>`).join(', ')
-        : '_no teams yet_';
-
-    const embed = new EmbedBuilder()
-        .setColor(config.setup_completed ? 0x57f287 : 0x5865f2)
-        .setTitle('⚙️ Tournament bot setup')
-        .setDescription(
-            config.setup_completed
-                ? 'Setup is complete. All commands are available. You can change any setting below.'
-                : 'Complete the required steps below, then press **Finish setup** to unlock every command.',
-        )
-        .addFields(
-            {
-                name: 'Teams',
-                value: `${check(teams.length >= 2)} ${teams.length} team${teams.length === 1 ? '' : 's'} — ${teamList}`,
-            },
-            {
-                name: 'Channels',
-                value: [
-                    channelLine('submission', config),
-                    channelLine('leaderboard', config),
-                    channelLine('announcement', config),
-                    channelLine('teampanel', config),
-                ].join('\n'),
-            },
-            {
-                name: 'Fortnite feeds',
-                value: [
-                    `${check(config.shop_enabled)} **Item shop** — ${feedTarget(config.shop_enabled, config.shop_channel_id)}`,
-                    `${check(config.news_enabled)} **News & updates** — ${feedTarget(config.news_enabled, config.news_channel_id)}`,
-                ].join('\n'),
-            },
-            {
-                name: 'Scoring & options',
-                value: [
-                    `🎯 **${config.points_per_kill}** point${config.points_per_kill === 1 ? '' : 's'} per kill · 🏆 **${config.points_per_win}** per win`,
-                    `${check(config.ai_enabled)} AI screenshot verification`,
-                    `${check(config.player_submissions_enabled)} Players may submit their own results`,
-                    `${check(config.team_switching_allowed)} Members may switch teams freely`,
-                ].join('\n'),
-            },
-        );
-
-    if (missing.length) {
-        embed.addFields({ name: '⚠️ Still required', value: missing.map((item) => `• ${item}`).join('\n') });
-    }
-
-    return { embed, config, teams, missing };
-}
-
-function overviewComponents(config) {
-    return [
-        new ActionRowBuilder().addComponents(
-            new StringSelectMenuBuilder()
-                .setCustomId('setup:menu')
-                .setPlaceholder('Choose what to configure')
-                .addOptions(
-                    { label: 'Teams', value: 'teams', description: 'Create or link the competing teams.', emoji: '👥' },
-                    { label: 'Channels', value: 'channels', description: 'Pick the channels the bot posts in.', emoji: '📺' },
-                    { label: 'Fortnite feeds', value: 'feeds', description: 'Item shop and news feed.', emoji: '🛒' },
-                    { label: 'Scoring', value: 'scoring', description: 'Points per kill and per win.', emoji: '🎯' },
-                    { label: 'Options', value: 'options', description: 'AI, submissions and team switching.', emoji: '🔧' },
-                ),
-        ),
-        new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('setup:finish')
-                .setLabel(config.setup_completed ? 'Re-check and save' : 'Finish setup')
-                .setStyle(ButtonStyle.Success)
-                .setEmoji('✅'),
-            new ButtonBuilder()
-                .setCustomId('setup:refresh')
-                .setLabel('Refresh')
-                .setStyle(ButtonStyle.Secondary)
-                .setEmoji('🔄'),
-        ),
-    ];
-}
-
-async function renderOverview(interaction) {
-    const { embed, config } = await overviewEmbed(interaction.guild);
-    const payload = { embeds: [embed], components: overviewComponents(config) };
-
-    if (interaction.replied || interaction.deferred) {
+async function respond(interaction, payload) {
+    if (interaction.deferred || interaction.replied) {
         await interaction.editReply(payload);
     } else if (interaction.isChatInputCommand()) {
         await interaction.reply({ ...payload, ephemeral: true });
@@ -160,356 +46,492 @@ async function renderOverview(interaction) {
     }
 }
 
-function requireAdministrator(interaction) {
-    return interaction.memberPermissions?.has(PermissionFlagsBits.Administrator);
-}
+// --- Overview ----------------------------------------------------------------
 
-// --- Teams -----------------------------------------------------------------
-
-async function renderTeams(interaction) {
-    const teams = await teamStore.getTeams(interaction.guildId);
+async function renderOverview(interaction) {
+    const config = await getConfig(interaction.guildId);
+    const ranks = await selfRoles.getRoles(interaction.guildId, 'rank');
+    const agents = await selfRoles.getRoles(interaction.guildId, 'agent');
 
     const embed = new EmbedBuilder()
-        .setColor(0x5865f2)
-        .setTitle('👥 Teams')
+        .setColor(config.setup_completed ? 0x57f287 : 0xff4655)
+        .setTitle('⚙️ Valorant bot setup')
         .setDescription(
-            [
-                'Teams are Discord roles. Members join one and their tournament points count for that team.',
-                '',
-                '**Create teams** lets the bot make the roles for you.',
-                '**Link existing roles** turns roles you already have into teams.',
-            ].join('\n'),
+            config.setup_completed
+                ? 'Setup is complete. All commands are available. You can change any setting below.'
+                : 'Configure what you need, then press **Finish setup** to unlock every command.',
         )
-        .addFields({
-            name: `Current teams (${teams.length})`,
-            value: teams.length ? teams.map((team) => `• <@&${team.role_id}>`).join('\n') : '_none yet_',
-        });
+        .addFields(
+            {
+                name: 'Welcome & goodbye',
+                value: [
+                    `${check(config.welcome_enabled)} **Welcome** — ${config.welcome_channel_id ? `<#${config.welcome_channel_id}>` : '_no channel_'}`,
+                    `${check(config.goodbye_enabled)} **Goodbye** — ${config.goodbye_channel_id ? `<#${config.goodbye_channel_id}>` : '_no channel_'}`,
+                ].join('\n'),
+            },
+            {
+                name: 'Rules',
+                value: [
+                    `${check(config.rules_channel_id)} **Channel** — ${config.rules_channel_id ? `<#${config.rules_channel_id}>` : '_not set_'}`,
+                    `${check(config.rules_accept_enabled)} **Accept button** — ${config.rules_accept_role_id ? `grants <@&${config.rules_accept_role_id}>` : '_no role chosen_'}`,
+                ].join('\n'),
+            },
+            {
+                name: 'Ranks & agents',
+                value: [
+                    `${check(ranks.length)} **${ranks.length}** rank role(s)`,
+                    `${check(agents.length)} **${agents.length}** agent role(s)`,
+                    `${check(config.roles_panel_channel_id)} **Panel channel** — ${config.roles_panel_channel_id ? `<#${config.roles_panel_channel_id}>` : '_not set_'}`,
+                ].join('\n'),
+            },
+        );
 
-    await interaction.update({
+    const components = [
+        new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+                .setCustomId('setup:menu')
+                .setPlaceholder('Choose what to configure')
+                .addOptions(
+                    { label: 'Welcome message', value: 'welcome', emoji: '👋' },
+                    { label: 'Goodbye message', value: 'goodbye', emoji: '🚪' },
+                    { label: 'Rules', value: 'rules', emoji: '📜' },
+                    { label: 'Ranks & agents', value: 'roles', emoji: '🎮' },
+                ),
+        ),
+        new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('setup:finish')
+                .setLabel(config.setup_completed ? 'Re-check and save' : 'Finish setup')
+                .setStyle(ButtonStyle.Success)
+                .setEmoji('✅'),
+            new ButtonBuilder().setCustomId('setup:refresh').setLabel('Refresh').setStyle(ButtonStyle.Secondary).setEmoji('🔄'),
+        ),
+    ];
+
+    await respond(interaction, { embeds: [embed], components });
+}
+
+// --- Welcome / goodbye ---------------------------------------------------------
+
+function messageSectionEmbed({ title, color, enabled, channelId, message, fallback }) {
+    return new EmbedBuilder()
+        .setColor(color)
+        .setTitle(title)
+        .addFields(
+            { name: `${check(enabled)} Enabled`, value: enabled ? 'Members will see this.' : 'Turned off.' },
+            { name: 'Channel', value: channelId ? `<#${channelId}>` : '_not set_' },
+            { name: 'Message', value: message || `_using the default:_\n${fallback}` },
+        )
+        .setFooter({ text: 'Placeholders: {user} {username} {server} {membercount}' });
+}
+
+async function renderWelcome(interaction) {
+    const config = await getConfig(interaction.guildId);
+    const embed = messageSectionEmbed({
+        title: '👋 Welcome message',
+        color: 0xff4655,
+        enabled: config.welcome_enabled,
+        channelId: config.welcome_channel_id,
+        message: config.welcome_message,
+        fallback: DEFAULT_WELCOME,
+    });
+
+    await respond(interaction, {
         embeds: [embed],
         components: [
             new ActionRowBuilder().addComponents(
-                new RoleSelectMenuBuilder()
-                    .setCustomId('setup:teamroles')
-                    .setPlaceholder('Link existing roles as teams')
-                    .setMinValues(2)
-                    .setMaxValues(8),
+                new ChannelSelectMenuBuilder()
+                    .setCustomId('setup:setchannel:welcome')
+                    .setPlaceholder('Select the welcome channel')
+                    .addChannelTypes(ChannelType.GuildText),
             ),
             new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
-                    .setCustomId('setup:teamcreate')
-                    .setLabel('Create teams for me')
-                    .setStyle(ButtonStyle.Primary)
-                    .setEmoji('✨'),
-                new ButtonBuilder()
-                    .setCustomId('setup:teamclear')
-                    .setLabel('Remove all teams')
-                    .setStyle(ButtonStyle.Danger)
-                    .setEmoji('🗑️'),
+                    .setCustomId('setup:toggle:welcome_enabled')
+                    .setLabel(config.welcome_enabled ? 'Disable' : 'Enable')
+                    .setStyle(config.welcome_enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('setup:editmsg:welcome').setLabel('Edit message').setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder().setCustomId('setup:back').setLabel('Back').setStyle(ButtonStyle.Secondary),
             ),
         ],
     });
 }
 
-async function handleTeamCreateModal(interaction) {
-    const raw = interaction.fields.getTextInputValue('names');
-    const names = [...new Set(raw.split(/[\n,]/).map((name) => name.trim()).filter(Boolean))].slice(0, 8);
+async function renderGoodbye(interaction) {
+    const config = await getConfig(interaction.guildId);
+    const embed = messageSectionEmbed({
+        title: '🚪 Goodbye message',
+        color: 0x2f3136,
+        enabled: config.goodbye_enabled,
+        channelId: config.goodbye_channel_id,
+        message: config.goodbye_message,
+        fallback: DEFAULT_GOODBYE,
+    });
 
-    if (names.length < 2) {
-        await interaction.reply({ content: 'Enter at least two team names.', ephemeral: true });
+    await respond(interaction, {
+        embeds: [embed],
+        components: [
+            new ActionRowBuilder().addComponents(
+                new ChannelSelectMenuBuilder()
+                    .setCustomId('setup:setchannel:goodbye')
+                    .setPlaceholder('Select the goodbye channel')
+                    .addChannelTypes(ChannelType.GuildText),
+            ),
+            new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('setup:toggle:goodbye_enabled')
+                    .setLabel(config.goodbye_enabled ? 'Disable' : 'Enable')
+                    .setStyle(config.goodbye_enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('setup:editmsg:goodbye').setLabel('Edit message').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('setup:back').setLabel('Back').setStyle(ButtonStyle.Secondary),
+            ),
+        ],
+    });
+}
+
+function showMessageModal(interaction, key, { title, label, maxLength, current, placeholder }) {
+    return interaction.showModal(
+        new ModalBuilder()
+            .setCustomId(`setup:msgmodal:${key}`)
+            .setTitle(title)
+            .addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('message')
+                        .setLabel(label)
+                        .setStyle(TextInputStyle.Paragraph)
+                        .setRequired(true)
+                        .setMaxLength(maxLength)
+                        .setPlaceholder(placeholder)
+                        .setValue(current || ''),
+                ),
+            ),
+    );
+}
+
+async function handleMessageModal(interaction, key) {
+    const message = interaction.fields.getTextInputValue('message').trim();
+    const column = key === 'rules' ? 'rules_message' : `${key}_message`;
+    await updateConfig(interaction.guildId, { [column]: message });
+
+    if (key === 'welcome') await renderWelcome(interaction);
+    else if (key === 'goodbye') await renderGoodbye(interaction);
+    else if (key === 'rules') await renderRules(interaction);
+}
+
+// --- Rules -----------------------------------------------------------------
+
+async function renderRules(interaction) {
+    const config = await getConfig(interaction.guildId);
+
+    const embed = new EmbedBuilder()
+        .setColor(0xff4655)
+        .setTitle('📜 Rules')
+        .addFields(
+            { name: 'Channel', value: config.rules_channel_id ? `<#${config.rules_channel_id}>` : '_not set_' },
+            { name: 'Text', value: config.rules_message || '_not set yet_' },
+            {
+                name: `${check(config.rules_accept_enabled)} Accept button`,
+                value: config.rules_accept_role_id
+                    ? `Grants <@&${config.rules_accept_role_id}> when a member clicks **I agree**.`
+                    : 'Choose a role below to grant when a member accepts.',
+            },
+        );
+
+    await respond(interaction, {
+        embeds: [embed],
+        components: [
+            new ActionRowBuilder().addComponents(
+                new ChannelSelectMenuBuilder()
+                    .setCustomId('setup:setchannel:rules')
+                    .setPlaceholder('Select the rules channel')
+                    .addChannelTypes(ChannelType.GuildText),
+            ),
+            new ActionRowBuilder().addComponents(
+                new RoleSelectMenuBuilder().setCustomId('setup:setacceptrole').setPlaceholder('Role granted on accept'),
+            ),
+            new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('setup:editmsg:rules').setLabel('Edit rules text').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('setup:toggle:rules_accept_enabled')
+                    .setLabel(config.rules_accept_enabled ? 'Disable accept button' : 'Enable accept button')
+                    .setStyle(config.rules_accept_enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+            ),
+            new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('setup:postrules')
+                    .setLabel('Post rules message')
+                    .setStyle(ButtonStyle.Primary)
+                    .setEmoji('📤')
+                    .setDisabled(!config.rules_channel_id),
+                new ButtonBuilder().setCustomId('setup:back').setLabel('Back').setStyle(ButtonStyle.Secondary),
+            ),
+        ],
+    });
+}
+
+async function postRules(interaction) {
+    await interaction.deferUpdate();
+    const config = await getConfig(interaction.guildId);
+
+    if (!config.rules_channel_id) {
+        await renderRules(interaction);
         return;
+    }
+
+    const channel = await interaction.guild.channels.fetch(config.rules_channel_id).catch(() => null);
+    if (!channel?.isTextBased()) {
+        await renderRules(interaction);
+        return;
+    }
+
+    const payload = rulesPayload(config);
+    const existing = config.rules_message_id ? await channel.messages.fetch(config.rules_message_id).catch(() => null) : null;
+    const message = existing ? await existing.edit(payload) : await channel.send(payload);
+
+    await updateConfig(interaction.guildId, { rules_message_id: message.id });
+    await renderRules(interaction);
+}
+
+// --- Ranks & agents ----------------------------------------------------------
+
+async function renderRoles(interaction) {
+    const config = await getConfig(interaction.guildId);
+    const ranks = await selfRoles.getRoles(interaction.guildId, 'rank');
+    const agents = await selfRoles.getRoles(interaction.guildId, 'agent');
+
+    const embed = new EmbedBuilder()
+        .setColor(0xff4655)
+        .setTitle('🎮 Ranks & agents')
+        .setDescription('Members self-assign these from a panel. Add ranks any time as the game evolves.')
+        .addFields(
+            {
+                name: `Ranks (${ranks.length})`,
+                value: ranks.length ? ranks.map((rank) => `<@&${rank.role_id}>`).join(', ') : '_none yet_',
+            },
+            {
+                name: `Agents (${agents.length})`,
+                value: CLASS_ORDER.map((key) => {
+                    const inClass = agents.filter((agent) => agent.group_name === key);
+                    if (!inClass.length) return null;
+                    return `${CLASSES[key].emoji} **${CLASSES[key].label}** — ${inClass.map((agent) => `<@&${agent.role_id}>`).join(', ')}`;
+                })
+                    .filter(Boolean)
+                    .join('\n') || '_none yet_',
+            },
+            { name: 'Panel channel', value: config.roles_panel_channel_id ? `<#${config.roles_panel_channel_id}>` : '_not set_' },
+        );
+
+    await respond(interaction, {
+        embeds: [embed],
+        components: [
+            new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('setup:rankdefaults').setLabel('Create default ranks').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('setup:rankadd').setLabel('Add rank').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('setup:rankremove')
+                    .setLabel('Remove rank')
+                    .setStyle(ButtonStyle.Danger)
+                    .setDisabled(!ranks.length),
+            ),
+            new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('setup:agentdefaults').setLabel('Create default agents').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('setup:agentadd').setLabel('Add agent').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('setup:agentremove')
+                    .setLabel('Remove agent')
+                    .setStyle(ButtonStyle.Danger)
+                    .setDisabled(!agents.length),
+            ),
+            new ActionRowBuilder().addComponents(
+                new ChannelSelectMenuBuilder()
+                    .setCustomId('setup:setchannel:rolespanel')
+                    .setPlaceholder('Select the roles panel channel')
+                    .addChannelTypes(ChannelType.GuildText),
+            ),
+            new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('setup:postrolespanel')
+                    .setLabel('Post role panel')
+                    .setStyle(ButtonStyle.Success)
+                    .setEmoji('📤')
+                    .setDisabled(!config.roles_panel_channel_id || (!ranks.length && !agents.length)),
+                new ButtonBuilder().setCustomId('setup:back').setLabel('Back').setStyle(ButtonStyle.Secondary),
+            ),
+        ],
+    });
+}
+
+async function createDefaultRoles(interaction, category, defaults) {
+    await interaction.deferUpdate();
+    const existing = await selfRoles.getRoles(interaction.guildId, category);
+    const existingLabels = new Set(existing.map((row) => row.label.toLowerCase()));
+
+    for (const entry of defaults) {
+        if (existingLabels.has(entry.label.toLowerCase())) continue;
+
+        const role = await interaction.guild.roles.create({
+            name: entry.label,
+            color: entry.color,
+            hoist: category === 'rank',
+            mentionable: false,
+            reason: `Valorant ${category} role created by ${interaction.user.tag}`,
+        });
+
+        await selfRoles.addRole(interaction.guildId, {
+            category,
+            roleId: role.id,
+            label: entry.label,
+            group: entry.group || null,
+            emoji: entry.emoji || null,
+        });
+    }
+
+    await renderRoles(interaction);
+}
+
+async function postRolesPanel(interaction) {
+    await interaction.deferUpdate();
+    const config = await getConfig(interaction.guildId);
+
+    if (!config.roles_panel_channel_id) {
+        await renderRoles(interaction);
+        return;
+    }
+
+    const channel = await interaction.guild.channels.fetch(config.roles_panel_channel_id).catch(() => null);
+    if (!channel?.isTextBased()) {
+        await renderRoles(interaction);
+        return;
+    }
+
+    const payload = await rolesPanelPayload(interaction.guildId);
+    const existing = config.roles_panel_message_id
+        ? await channel.messages.fetch(config.roles_panel_message_id).catch(() => null)
+        : null;
+    const message = existing ? await existing.edit(payload) : await channel.send(payload);
+
+    await updateConfig(interaction.guildId, { roles_panel_message_id: message.id });
+    await renderRoles(interaction);
+}
+
+function showAddModal(interaction, category) {
+    const components = [
+        new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('name')
+                .setLabel(category === 'rank' ? 'Rank name' : 'Agent name')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+                .setMaxLength(50),
+        ),
+    ];
+
+    if (category === 'agent') {
+        components.push(
+            new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                    .setCustomId('class')
+                    .setLabel('Class: duelist, controller, initiator, sentinel')
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true)
+                    .setMaxLength(20),
+            ),
+        );
+    }
+
+    return interaction.showModal(
+        new ModalBuilder().setCustomId(`setup:addmodal:${category}`).setTitle(`Add ${category}`).addComponents(...components),
+    );
+}
+
+async function handleAddModal(interaction, category) {
+    const name = interaction.fields.getTextInputValue('name').trim();
+    let group = null;
+
+    if (category === 'agent') {
+        group = interaction.fields.getTextInputValue('class').trim().toLowerCase();
+        if (!CLASS_ORDER.includes(group)) {
+            await interaction.reply({
+                content: `"${group}" is not a class. Use one of: ${CLASS_ORDER.join(', ')}.`,
+                ephemeral: true,
+            });
+            return;
+        }
     }
 
     await interaction.deferReply({ ephemeral: true });
 
-    const created = [];
-    for (const [index, name] of names.entries()) {
-        const role = await interaction.guild.roles.create({
-            name: name.slice(0, 90),
-            color: TEAM_COLORS[index % TEAM_COLORS.length],
-            hoist: true,
-            mentionable: true,
-            reason: `Tournament team created by ${interaction.user.tag}`,
-        });
-        created.push({ roleId: role.id, name: role.name, color: TEAM_COLORS[index % TEAM_COLORS.length] });
-    }
+    const role = await interaction.guild.roles.create({
+        name,
+        hoist: category === 'rank',
+        mentionable: false,
+        reason: `Valorant ${category} role created by ${interaction.user.tag}`,
+    });
 
-    await teamStore.replaceTeams(interaction.guildId, created);
-    await interaction.editReply(
-        `Created ${created.length} teams: ${created.map((team) => `<@&${team.roleId}>`).join(', ')}\n\nRun \`/setup\` again to continue.`,
-    );
+    await selfRoles.addRole(interaction.guildId, { category, roleId: role.id, label: name, group });
+
+    await interaction.editReply(`Created **${name}** as a ${role}. Run \`/setup\` again to continue.`);
 }
 
-async function handleTeamRoles(interaction) {
-    const me = await interaction.guild.members.fetchMe();
-    const roles = interaction.values.map((id) => interaction.guild.roles.cache.get(id)).filter(Boolean);
+async function renderRemovePicker(interaction, category, group) {
+    const rows = group
+        ? (await selfRoles.getRoles(interaction.guildId, category)).filter((row) => row.group_name === group)
+        : await selfRoles.getRoles(interaction.guildId, category);
 
-    const invalid = roles.find(
-        (role) => role.managed || role.id === interaction.guildId || role.position >= me.roles.highest.position,
-    );
-
-    if (invalid) {
-        await interaction.reply({
-            content: `I cannot manage ${invalid}. Choose normal roles below my highest role.`,
-            ephemeral: true,
-        });
-        return;
-    }
-
-    await teamStore.replaceTeams(
-        interaction.guildId,
-        roles.map((role) => ({ roleId: role.id, name: role.name, color: role.color || null })),
-    );
-
-    await renderTeams(interaction);
-}
-
-// --- Channels --------------------------------------------------------------
-
-async function renderChannels(interaction) {
-    const config = await getConfig(interaction.guildId);
-
-    const embed = new EmbedBuilder()
-        .setColor(0x5865f2)
-        .setTitle('📺 Channels')
-        .setDescription(
-            Object.entries(CHANNEL_FIELDS)
-                .filter(([key]) => !['shop', 'news'].includes(key))
-                .map(([key]) => `${channelLine(key, config)}\n_${CHANNEL_FIELDS[key].hint}_`)
-                .join('\n\n'),
-        );
-
-    await interaction.update({
-        embeds: [embed],
+    await respond(interaction, {
+        embeds: [
+            new EmbedBuilder()
+                .setColor(0xed4245)
+                .setTitle(`Remove ${category}${group ? ` — ${CLASSES[group].label}` : ''}`)
+                .setDescription('Pick one to delete its role and remove it from the panel.'),
+        ],
         components: [
             new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder()
-                    .setCustomId('setup:pickchannel')
-                    .setPlaceholder('Which channel do you want to set?')
-                    .addOptions(
-                        { label: 'Submission review channel', value: 'submission' },
-                        { label: 'Leaderboard channel', value: 'leaderboard' },
-                        { label: 'Announcement channel', value: 'announcement' },
-                        { label: 'Team join channel', value: 'teampanel' },
-                    ),
+                    .setCustomId(`setup:removepick:${category}`)
+                    .setPlaceholder(`Choose a ${category} to remove`)
+                    .addOptions(rows.map((row) => ({ label: row.label, value: row.role_id }))),
             ),
             new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('setup:back').setLabel('Back').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('setup:roles').setLabel('Back').setStyle(ButtonStyle.Secondary),
             ),
         ],
     });
 }
 
-async function renderChannelPicker(interaction, key) {
-    const field = CHANNEL_FIELDS[key];
+async function renderAgentClassPicker(interaction) {
+    const agents = await selfRoles.getRoles(interaction.guildId, 'agent');
+    const classesInUse = CLASS_ORDER.filter((key) => agents.some((agent) => agent.group_name === key));
 
-    await interaction.update({
+    await respond(interaction, {
         embeds: [
-            new EmbedBuilder()
-                .setColor(0x5865f2)
-                .setTitle(`📺 ${field.label}`)
-                .setDescription(field.hint),
+            new EmbedBuilder().setColor(0xed4245).setTitle('Remove agent').setDescription('Which class is the agent in?'),
         ],
         components: [
             new ActionRowBuilder().addComponents(
-                new ChannelSelectMenuBuilder()
-                    .setCustomId(`setup:setchannel:${key}`)
-                    .setPlaceholder('Select a text channel')
-                    .addChannelTypes(ChannelType.GuildText)
-                    .setMinValues(1)
-                    .setMaxValues(1),
-            ),
-            new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('setup:channels').setLabel('Back').setStyle(ButtonStyle.Secondary),
-            ),
-        ],
-    });
-}
-
-async function handleSetChannel(interaction, key) {
-    const field = CHANNEL_FIELDS[key];
-    const [channelId] = interaction.values;
-
-    await updateConfig(interaction.guildId, { [field.column]: channelId });
-
-    if (key === 'shop') await setShopPanel(interaction.guildId, channelId, [], null);
-    if (key === 'news') {
-        const config = await getConfig(interaction.guildId);
-        await setNewsFeed(interaction.guildId, channelId, config.news_mention_role_id);
-    }
-
-    if (key === 'shop' || key === 'news') {
-        await renderFeeds(interaction);
-        return;
-    }
-
-    await renderChannels(interaction);
-}
-
-// --- Feeds -----------------------------------------------------------------
-
-async function renderFeeds(interaction) {
-    const config = await getConfig(interaction.guildId);
-
-    const embed = new EmbedBuilder()
-        .setColor(0x55d6ff)
-        .setTitle('🛒 Fortnite feeds')
-        .setDescription('Both feeds are optional and post in a channel of your choice.')
-        .addFields(
-            {
-                name: `${check(config.shop_enabled)} Item shop`,
-                value: config.shop_channel_id
-                    ? `Posts in <#${config.shop_channel_id}>, refreshed every 15 minutes.`
-                    : '_no channel selected_',
-            },
-            {
-                name: `${check(config.news_enabled)} News & updates`,
-                value: config.news_channel_id
-                    ? `Posts in <#${config.news_channel_id}>, checked every 10 minutes.`
-                    : '_no channel selected_',
-            },
-        );
-
-    await interaction.update({
-        embeds: [embed],
-        components: [
-            new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('setup:toggle:shop_enabled')
-                    .setLabel(config.shop_enabled ? 'Disable item shop' : 'Enable item shop')
-                    .setStyle(config.shop_enabled ? ButtonStyle.Danger : ButtonStyle.Success),
-                new ButtonBuilder()
-                    .setCustomId('setup:pick:shop')
-                    .setLabel('Item shop channel')
-                    .setStyle(ButtonStyle.Secondary),
-            ),
-            new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('setup:toggle:news_enabled')
-                    .setLabel(config.news_enabled ? 'Disable news' : 'Enable news')
-                    .setStyle(config.news_enabled ? ButtonStyle.Danger : ButtonStyle.Success),
-                new ButtonBuilder()
-                    .setCustomId('setup:pick:news')
-                    .setLabel('News channel')
-                    .setStyle(ButtonStyle.Secondary),
-            ),
-            new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('setup:back').setLabel('Back').setStyle(ButtonStyle.Secondary),
-            ),
-        ],
-    });
-}
-
-// --- Options and scoring ---------------------------------------------------
-
-async function renderOptions(interaction) {
-    const config = await getConfig(interaction.guildId);
-
-    const embed = new EmbedBuilder()
-        .setColor(0x5865f2)
-        .setTitle('🔧 Options')
-        .addFields(
-            {
-                name: `${check(config.ai_enabled)} AI screenshot verification`,
-                value: 'Reads kills, the win banner and the Epic name from an uploaded screenshot. A human always confirms in the dashboard.',
-            },
-            {
-                name: `${check(config.player_submissions_enabled)} Player submissions`,
-                value: 'When off, only staff can submit results with `/admin-submit`.',
-            },
-            {
-                name: `${check(config.team_switching_allowed)} Free team switching`,
-                value: 'When off, a team choice is permanent until an administrator resets it.',
-            },
-        );
-
-    await interaction.update({
-        embeds: [embed],
-        components: [
-            new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('setup:toggle:ai_enabled')
-                    .setLabel('AI verification')
-                    .setStyle(config.ai_enabled ? ButtonStyle.Success : ButtonStyle.Secondary),
-                new ButtonBuilder()
-                    .setCustomId('setup:toggle:player_submissions_enabled')
-                    .setLabel('Player submissions')
-                    .setStyle(config.player_submissions_enabled ? ButtonStyle.Success : ButtonStyle.Secondary),
-                new ButtonBuilder()
-                    .setCustomId('setup:toggle:team_switching_allowed')
-                    .setLabel('Team switching')
-                    .setStyle(config.team_switching_allowed ? ButtonStyle.Success : ButtonStyle.Secondary),
-            ),
-            new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('setup:back').setLabel('Back').setStyle(ButtonStyle.Secondary),
-            ),
-        ],
-    });
-}
-
-async function showScoringModal(interaction) {
-    const config = await getConfig(interaction.guildId);
-
-    await interaction.showModal(
-        new ModalBuilder()
-            .setCustomId('setup:scoring')
-            .setTitle('Scoring')
-            .addComponents(
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder()
-                        .setCustomId('per_kill')
-                        .setLabel('Points per kill')
-                        .setStyle(TextInputStyle.Short)
-                        .setValue(String(config.points_per_kill))
-                        .setRequired(true)
-                        .setMaxLength(3),
-                ),
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder()
-                        .setCustomId('per_win')
-                        .setLabel('Points for a Victory Royale')
-                        .setStyle(TextInputStyle.Short)
-                        .setValue(String(config.points_per_win))
-                        .setRequired(true)
-                        .setMaxLength(3),
+                classesInUse.map((key) =>
+                    new ButtonBuilder().setCustomId(`setup:agentremoveclass:${key}`).setLabel(CLASSES[key].label).setStyle(ButtonStyle.Secondary),
                 ),
             ),
-    );
+            new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('setup:roles').setLabel('Back').setStyle(ButtonStyle.Secondary),
+            ),
+        ],
+    });
 }
 
-async function handleScoringModal(interaction) {
-    const perKill = Number.parseInt(interaction.fields.getTextInputValue('per_kill'), 10);
-    const perWin = Number.parseInt(interaction.fields.getTextInputValue('per_win'), 10);
-
-    if (!Number.isInteger(perKill) || perKill < 0 || !Number.isInteger(perWin) || perWin < 0) {
-        await interaction.reply({ content: 'Enter whole numbers of 0 or higher.', ephemeral: true });
-        return;
-    }
-
-    await updateConfig(interaction.guildId, { points_per_kill: perKill, points_per_win: perWin });
-    await renderOverview(interaction);
+async function handleRemovePick(interaction, category) {
+    const [roleId] = interaction.values;
+    const removed = await selfRoles.removeRole(interaction.guildId, roleId);
+    if (removed) await interaction.guild.roles.delete(roleId, `Removed by ${interaction.user.tag}`).catch(() => {});
+    await renderRoles(interaction);
 }
 
 // --- Finish ----------------------------------------------------------------
 
 async function handleFinish(interaction) {
-    const { embed, config, teams, missing } = await overviewEmbed(interaction.guild);
-
-    if (missing.length) {
-        await interaction.update({ embeds: [embed], components: overviewComponents(config) });
-        await interaction.followUp({
-            content: `Setup is not complete yet:\n${missing.map((item) => `• ${item}`).join('\n')}`,
-            ephemeral: true,
-        });
-        return;
-    }
-
     await updateConfig(interaction.guildId, { setup_completed: true, setup_step: null });
-
-    if (!config.shop_enabled) await clearShopPanel(interaction.guildId);
-    if (!config.news_enabled) await clearNewsFeed(interaction.guildId);
-
     await deployGuildCommands(interaction.guildId, true);
 
     await interaction.update({
@@ -519,12 +541,12 @@ async function handleFinish(interaction) {
                 .setTitle('✅ Setup complete')
                 .setDescription(
                     [
-                        `**${teams.length}** teams are ready and every command is now available.`,
+                        'Every command is now available.',
                         '',
                         '**Next steps**',
-                        '• `/manage team panel` — post the team join panel so members can pick a team.',
-                        '• `/manage leaderboard post` — post the live team and player boards.',
-                        '• `/manage tournament create` — open your first tournament.',
+                        '• Post the rules and role panel from the **Rules** and **Ranks & agents** sections if you have not already.',
+                        '• `/roles` — members can check what they picked.',
+                        '• `/agent` — a fun random-agent roulette for when nobody can decide who to lock in.',
                         '',
                         'Run `/setup` again at any time to change these settings.',
                     ].join('\n'),
@@ -539,7 +561,7 @@ async function handleFinish(interaction) {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('setup')
-        .setDescription('Configure the tournament bot for this server.')
+        .setDescription('Configure the Valorant community bot for this server.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .setDMPermission(false),
 
@@ -562,47 +584,39 @@ module.exports = {
         const [, action, argument] = interaction.customId.split(':');
 
         if (action === 'back' || action === 'refresh') return renderOverview(interaction);
-        if (action === 'channels') return renderChannels(interaction);
-        if (action === 'pick') return renderChannelPicker(interaction, argument);
         if (action === 'finish') return handleFinish(interaction);
-        if (action === 'scoring') return showScoringModal(interaction);
+        if (action === 'roles') return renderRoles(interaction);
+
+        if (action === 'editmsg') {
+            const settings = {
+                welcome: { key: 'welcome', title: 'Welcome message', label: 'Message', maxLength: 500, placeholder: '{user} {username} {server} {membercount}' },
+                goodbye: { key: 'goodbye', title: 'Goodbye message', label: 'Message', maxLength: 500, placeholder: '{user} {username} {server} {membercount}' },
+                rules: { key: 'rules', title: 'Rules text', label: 'Rules', maxLength: 4000, placeholder: 'Be respectful. No cheating. Have fun.' },
+            }[argument];
+
+            const config = await getConfig(interaction.guildId);
+            const current = argument === 'rules' ? config.rules_message : config[`${argument}_message`];
+            return showMessageModal(interaction, settings.key, { ...settings, current });
+        }
 
         if (action === 'toggle') {
             const config = await getConfig(interaction.guildId);
-            const next = !config[argument];
-            await updateConfig(interaction.guildId, { [argument]: next });
-
-            if (argument === 'shop_enabled' && !next) await clearShopPanel(interaction.guildId);
-            if (argument === 'news_enabled' && !next) await clearNewsFeed(interaction.guildId);
-
-            return ['shop_enabled', 'news_enabled'].includes(argument)
-                ? renderFeeds(interaction)
-                : renderOptions(interaction);
+            await updateConfig(interaction.guildId, { [argument]: !config[argument] });
+            if (argument === 'welcome_enabled') return renderWelcome(interaction);
+            if (argument === 'goodbye_enabled') return renderGoodbye(interaction);
+            if (argument === 'rules_accept_enabled') return renderRules(interaction);
         }
 
-        if (action === 'teamcreate') {
-            return interaction.showModal(
-                new ModalBuilder()
-                    .setCustomId('setup:teamnames')
-                    .setTitle('Create teams')
-                    .addComponents(
-                        new ActionRowBuilder().addComponents(
-                            new TextInputBuilder()
-                                .setCustomId('names')
-                                .setLabel('Team names, one per line (2-8)')
-                                .setStyle(TextInputStyle.Paragraph)
-                                .setPlaceholder('Team Alpha\nTeam Bravo\nTeam Charlie')
-                                .setRequired(true)
-                                .setMaxLength(400),
-                        ),
-                    ),
-            );
-        }
+        if (action === 'postrules') return postRules(interaction);
+        if (action === 'postrolespanel') return postRolesPanel(interaction);
 
-        if (action === 'teamclear') {
-            await teamStore.replaceTeams(interaction.guildId, []);
-            return renderTeams(interaction);
-        }
+        if (action === 'rankdefaults') return createDefaultRoles(interaction, 'rank', DEFAULT_RANKS);
+        if (action === 'agentdefaults') return createDefaultRoles(interaction, 'agent', DEFAULT_AGENTS);
+        if (action === 'rankadd') return showAddModal(interaction, 'rank');
+        if (action === 'agentadd') return showAddModal(interaction, 'agent');
+        if (action === 'rankremove') return renderRemovePicker(interaction, 'rank');
+        if (action === 'agentremove') return renderAgentClassPicker(interaction);
+        if (action === 'agentremoveclass') return renderRemovePicker(interaction, 'agent', argument);
     },
 
     async handleSelectMenu(interaction) {
@@ -615,16 +629,30 @@ module.exports = {
 
         if (action === 'menu') {
             const [choice] = interaction.values;
-            if (choice === 'teams') return renderTeams(interaction);
-            if (choice === 'channels') return renderChannels(interaction);
-            if (choice === 'feeds') return renderFeeds(interaction);
-            if (choice === 'options') return renderOptions(interaction);
-            if (choice === 'scoring') return showScoringModal(interaction);
+            if (choice === 'welcome') return renderWelcome(interaction);
+            if (choice === 'goodbye') return renderGoodbye(interaction);
+            if (choice === 'rules') return renderRules(interaction);
+            if (choice === 'roles') return renderRoles(interaction);
         }
 
-        if (action === 'teamroles') return handleTeamRoles(interaction);
-        if (action === 'pickchannel') return renderChannelPicker(interaction, interaction.values[0]);
-        if (action === 'setchannel') return handleSetChannel(interaction, argument);
+        if (action === 'setchannel') {
+            const field = CHANNEL_FIELDS[argument];
+            const [channelId] = interaction.values;
+            await updateConfig(interaction.guildId, { [field.column]: channelId });
+
+            if (argument === 'welcome') return renderWelcome(interaction);
+            if (argument === 'goodbye') return renderGoodbye(interaction);
+            if (argument === 'rules') return renderRules(interaction);
+            if (argument === 'rolespanel') return renderRoles(interaction);
+        }
+
+        if (action === 'setacceptrole') {
+            const [roleId] = interaction.values;
+            await updateConfig(interaction.guildId, { rules_accept_role_id: roleId });
+            return renderRules(interaction);
+        }
+
+        if (action === 'removepick') return handleRemovePick(interaction, argument);
     },
 
     async handleModalSubmit(interaction) {
@@ -633,8 +661,8 @@ module.exports = {
             return;
         }
 
-        const [, action] = interaction.customId.split(':');
-        if (action === 'teamnames') return handleTeamCreateModal(interaction);
-        if (action === 'scoring') return handleScoringModal(interaction);
+        const [, action, argument] = interaction.customId.split(':');
+        if (action === 'msgmodal') return handleMessageModal(interaction, argument);
+        if (action === 'addmodal') return handleAddModal(interaction, argument);
     },
 };

@@ -1,28 +1,26 @@
-# Fortnite Tournament Bot
+# Valorant Community Bot
 
-A Discord bot for running Fortnite custom-lobby tournaments: players register with their
-Epic name and region, admins post the creator code per region, and match results are
-verified from a screenshot by AI before a human confirms them on a web dashboard.
+A Discord bot for a Valorant community server: configurable welcome and goodbye messages,
+a rules message with an optional accept-to-enter button, and self-assign roles for
+competitive rank and the agents members main.
 
 ---
 
-## How a tournament runs
+## How it works
 
 1. **Setup** — an administrator runs `/setup`. Until that wizard is finished, `/setup` is
    the *only* command the server has. Finishing it deploys every other command.
-2. **Teams** — the wizard creates team roles (or links existing ones). Members join a team
-   from a button panel; their points count for that team.
-3. **Create** — `/manage tournament create name:"Summer Cup" regions:"EU, NAE, NAW"`.
-4. **Open** — `/manage tournament status status:Open` announces registration.
-5. **Register** — players run `/tournament join` with their exact Epic name and region.
-6. **Play** — `/manage tournament code region:EU code:ABC-123` posts the creator code and
-   pings everyone registered in that region.
-7. **Submit** — after the match, players run `/submit` with their kills, whether they won,
-   and their end-of-match screenshot. Staff can also submit for someone with `/admin-submit`.
-8. **Review** — the AI reads the kills, the win banner and the Epic name from the image.
-   Nothing scores until a human approves it on the dashboard or with `/review approve`.
-9. **Standings** — `/manage leaderboard post` puts self-updating team and player boards in a
-   channel. They refresh every minute and after every review.
+2. **Welcome & goodbye** — turn each on, pick a channel, and write a message. Placeholders
+   `{user}`, `{username}`, `{server}` and `{membercount}` get filled in automatically.
+3. **Rules** — write the rules text and post it. Optionally require members to press
+   **I agree** before they get a role — a simple gate for the rest of the server.
+4. **Ranks & agents** — create the standard rank ladder (Iron → Radiant) and the full agent
+   roster with one click each, grouped by class (Duelist, Controller, Initiator, Sentinel).
+   Add or remove individual ranks any time — useful whenever Riot changes the tier list or
+   ships a new agent. Post the panel and members pick their own rank and every agent they
+   main from select menus.
+5. **`/roles`** — a member can check what they currently have picked.
+6. **`/agent`** — a random-agent roulette for when nobody can decide who to lock in.
 
 ---
 
@@ -30,42 +28,15 @@ verified from a screenshot by AI before a human confirms them on a web dashboard
 
 | Command | Who | What it does |
 |---|---|---|
-| `/tournament join\|info\|list` | Everyone | Register and view tournaments. |
-| `/team list\|status` | Everyone | View teams and who is on them. |
-| `/leaderboard teams\|players` | Everyone | View the standings. |
-| `/submit` | Everyone | Submit your own match result. |
 | `/setup` | Admin | The configuration wizard. Re-run it any time to change settings. |
-| `/manage tournament create\|code\|status\|players\|info` | Admin | Manage tournaments, regions and creator codes. |
-| `/manage team panel\|assign\|reset` | Admin | Post the join panel, move or reset members. |
-| `/manage leaderboard post` | Admin | Post the self-updating boards. |
-| `/review queue\|show\|approve\|reject\|remove\|logs\|dashboard` | Admin | Review submissions from Discord. |
-| `/admin-submit` | Staff | Submit a result on behalf of a player. |
+| `/roles` | Everyone | View your current rank and agent pool. |
+| `/agent [class]` | Everyone | Get a random agent suggestion, optionally limited to one class. |
 
 Admin commands carry `default_member_permissions: Administrator`, so Discord hides them
-from members entirely. Because Discord enforces permissions per *command* and not per
-subcommand, every admin action lives under `/manage` rather than alongside the member
-subcommands it relates to.
+from members entirely.
 
----
-
-## Web dashboard
-
-Reachable at `/admin` on your bot's public URL. Sign in with `ADMIN_DASHBOARD_TOKEN`.
-
-Tabs:
-
-- **Pending** — everything awaiting a decision.
-- **AI corrected** — submissions where a human overruled what the AI read. This is the
-  accuracy audit trail.
-- **Approved** / **Rejected** / **All**.
-
-Each card shows the screenshot, the AI's verdict and confidence, and warnings when the AI
-disagrees with the player or the Epic name on the screenshot does not match the registered
-one. Kill count and win flag are pre-filled from the AI's reading and can be corrected
-before approving.
-
-Sessions are random ids stored server-side with a 12-hour expiry, and login is locked for
-15 minutes after 5 failed attempts.
+The actual rank/agent selection and rules acceptance happen on the panels `/setup` posts,
+via select menus and a button — there's no separate command for those.
 
 ---
 
@@ -74,12 +45,12 @@ Sessions are random ids stored server-side with a 12-hour expiry, and login is l
 ### 1. Discord application
 
 1. <https://discord.com/developers/applications> → **New Application**.
-2. **Bot** → copy the token (`DISCORD_TOKEN`), enable the **Server Members Intent**.
+2. **Bot** → copy the token (`DISCORD_TOKEN`), enable the **Server Members Intent**
+   (required to welcome/goodbye members and assign roles).
 3. **General Information** → copy the Application ID (`DISCORD_CLIENT_ID`).
 4. **OAuth2 → URL Generator**: scopes `bot` + `applications.commands`; permissions
-   **Manage Roles**, **Manage Channels**, **Send Messages**, **Embed Links**,
-   **Attach Files**, **Read Message History**. Invite the bot.
-5. Move the bot's role **above** every team role, or it cannot assign them.
+   **Manage Roles**, **Send Messages**, **Embed Links**. Invite the bot.
+5. Move the bot's role **above** every rank/agent role, or it cannot assign them.
 
 ### 2. Database
 
@@ -110,31 +81,17 @@ npm start
 | `DATABASE_URL` | **yes** | PostgreSQL connection string. |
 | `DATABASE_SSL` | no | Set to `false` for a local Postgres without TLS. |
 | `PORT` | no | HTTP port, defaults to `3000`. |
-| `NODE_ENV` | recommended | Set to `production` so cookies get the `Secure` flag. |
-| `ADMIN_DASHBOARD_TOKEN` | for the dashboard | The code admins type to sign in. |
-| `DASHBOARD_URL` | no | Public URL, used for the dashboard link in Discord. |
-| `OPENROUTER_API_KEY` | no | AI verifier, tried first. |
-| `GROQ_API_KEY` | no | AI verifier, tried second. |
-| `GEMINI_API_KEY` | no | AI verifier, tried third. |
-| `FORTNITE_API_KEY` | no | Optional; the public API works without it. |
-
-Any one AI key is enough — the verifier tries the configured providers in order and moves
-on if one fails. With no key at all, submissions simply go straight to manual review.
+| `NODE_ENV` | recommended | Set to `production` when deployed. |
 
 ---
 
-## Scoring
+## Hosting (Render + UptimeRobot)
 
-Points are configurable in `/setup` and default to:
-
-```
-points = kills × 1 + (win ? 10 : 0)
-```
-
-Only **approved** submissions score. Rejecting or removing a submission takes its points
-back immediately. A player can hold at most one approved win per tournament, and the same
-screenshot can never be submitted twice in a server — both are enforced by the database,
-not by application code.
+This bot is built to run on [Render](https://render.com) as a background/web service.
+Render's free and hobby tiers spin a service down after a period of inactivity, so the bot
+runs a tiny HTTP server (see `app.js`) that answers `OK` on `/`. Point an
+[UptimeRobot](https://uptimerobot.com) monitor at the service's public Render URL on an
+interval shorter than Render's idle timeout to keep the bot awake.
 
 ---
 
@@ -144,32 +101,32 @@ not by application code.
 index.js                     ← entry point
 app.js                       ← client, HTTP server, event wiring
 deploy/deployCommands.js     ← setup-gated command registration
-commands/<name>/<name>.js    ← one folder per command
+commands/setup/setup.js      ← the configuration wizard
+commands/roles/roles.js      ← self-assign role interactions (`/roles` + the panels)
+commands/agent/agent.js      ← `/agent` random-agent roulette
 utils/
-  db.js                      ← single shared pool + full schema
+  db.js                      ← single shared pool + schema
   configStore.js             ← per-guild settings
-  teamStore.js               ← teams and membership
-  tournamentStore.js         ← tournaments, regions, registrations
-  submissionStore.js         ← submissions and moderation log
-  scoreStore.js              ← point aggregation
-  leaderboards.js            ← embeds and live board refresh
-  aiVerifier.js              ← multi-provider screenshot verification
-  fortnite*.js               ← item shop and news feeds
-  dashboard.js               ← the web dashboard
-public/admin/                ← dashboard frontend
+  selfRoles.js                ← rank/agent role CRUD
+  welcomeGoodbye.js           ← welcome/goodbye message sending
+  panelRender.js              ← rules message + roles panel embeds/components
+  valorantData.js             ← default rank ladder and agent roster
 test/                        ← node:test suites
+scripts/                     ← doctor, smoke test, SQL validator
 ```
 
 Component `customId`s follow `<commandName>:<action>[:<arg>]`. The first segment must
-match a registered command name — that is how interactions are routed.
+match a registered command name — that is how interactions are routed. Panels posted by
+`/setup` (the rules message and the roles panel) use the `roles:` prefix so `/roles`
+handles the resulting button/select interactions even though `/setup` posted them.
 
 ---
 
 ## Tests
 
 ```bash
-npm test
+npm test              # unit tests
+npm run validate-sql  # parses every SQL statement with the real Postgres grammar
+npm run smoke         # setup/config/self-role flow against an in-memory Postgres
+npm run doctor        # checks your environment is ready to run the bot
 ```
-
-Covers the point formula, AI normalisation and confidence thresholds, Fortnite shop and
-news parsing, command shapes, and the rule that admin commands stay hidden.
