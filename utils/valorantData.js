@@ -7,17 +7,31 @@ const CLASSES = {
 
 const CLASS_ORDER = ['duelist', 'controller', 'initiator', 'sentinel'];
 
-const DEFAULT_RANKS = [
-    { label: 'Iron', color: 0x4f4f4f, emoji: '🔘' },
-    { label: 'Bronze', color: 0xa97142, emoji: '🟤' },
-    { label: 'Silver', color: 0xbfc1c2, emoji: '⚪' },
-    { label: 'Gold', color: 0xe8b923, emoji: '🟡' },
-    { label: 'Platinum', color: 0x17a2a2, emoji: '🟢' },
-    { label: 'Diamond', color: 0xb983ff, emoji: '🔷' },
-    { label: 'Ascendant', color: 0x10dc7c, emoji: '💚' },
-    { label: 'Immortal', color: 0xa52834, emoji: '🔴' },
-    { label: 'Radiant', color: 0xf4f1a0, emoji: '✨' },
+// Every tier except Radiant is split into 3 divisions, matching Valorant's actual rank
+// ladder (e.g. "Gold 2") — 8 tiers × 3 divisions + Radiant = 25, which is not a coincidence:
+// it is exactly Discord's 25-option limit for a single select menu, so the whole ladder
+// fits in one rank dropdown on the panel.
+const RANK_TIERS = [
+    { label: 'Iron', color: 0x4f4f4f, emoji: '🔘', divisions: 3 },
+    { label: 'Bronze', color: 0xa97142, emoji: '🟤', divisions: 3 },
+    { label: 'Silver', color: 0xbfc1c2, emoji: '⚪', divisions: 3 },
+    { label: 'Gold', color: 0xe8b923, emoji: '🟡', divisions: 3 },
+    { label: 'Platinum', color: 0x17a2a2, emoji: '🟢', divisions: 3 },
+    { label: 'Diamond', color: 0xb983ff, emoji: '🔷', divisions: 3 },
+    { label: 'Ascendant', color: 0x10dc7c, emoji: '💚', divisions: 3 },
+    { label: 'Immortal', color: 0xa52834, emoji: '🔴', divisions: 3 },
+    { label: 'Radiant', color: 0xf4f1a0, emoji: '✨', divisions: 0 },
 ];
+
+const DEFAULT_RANKS = RANK_TIERS.flatMap((tier) =>
+    tier.divisions
+        ? Array.from({ length: tier.divisions }, (_, index) => ({
+              label: `${tier.label} ${index + 1}`,
+              color: tier.color,
+              emoji: tier.emoji,
+          }))
+        : [{ label: tier.label, color: tier.color, emoji: tier.emoji }],
+);
 
 const DEFAULT_AGENTS = [
     { label: 'Jett', group: 'duelist', color: 0x7ec8e3 },

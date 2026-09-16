@@ -89,10 +89,30 @@ async function checkDatabase() {
 
         const expected = ['guild_config', 'self_roles'];
         const found = new Set(tables.rows.map((row) => row.table_name));
-        const missing = expected.filter((name) => !found.has(name));
+        const missingTables = expected.filter((name) => !found.has(name));
 
-        if (missing.length) fail('Schema', `missing tables: ${missing.join(', ')}`);
+        if (missingTables.length) fail('Schema', `missing tables: ${missingTables.join(', ')}`);
         else pass('Schema', `all ${expected.length} tables present`);
+
+        // A table that already existed under an older version of this bot is NOT altered by
+        // "CREATE TABLE IF NOT EXISTS" — only the ALTER TABLE block in utils/db.js adds
+        // missing columns to it. This check exists because that exact gap has silently broken
+        // every setup action in production before: catch it here instead.
+        const { DEFAULT_CONFIG } = require('../utils/configStore');
+        const columns = await query(
+            `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'guild_config'`,
+        );
+        const foundColumns = new Set(columns.rows.map((row) => row.column_name));
+        const missingColumns = Object.keys(DEFAULT_CONFIG).filter((name) => !foundColumns.has(name));
+
+        if (missingColumns.length) {
+            fail(
+                'guild_config columns',
+                `missing: ${missingColumns.join(', ')} — the table predates these; check the ALTER TABLE block in utils/db.js covers them, then restart the bot once to apply it`,
+            );
+        } else {
+            pass('guild_config columns', `all ${Object.keys(DEFAULT_CONFIG).length} expected columns present`);
+        }
     } catch (error) {
         fail('Database connection', error.message);
     } finally {

@@ -658,20 +658,26 @@ async function renderRemovePicker(interaction, category, group) {
     const rows = group
         ? (await selfRoles.getRoles(interaction.guildId, category)).filter((row) => row.group_name === group)
         : await selfRoles.getRoles(interaction.guildId, category);
+    const options = rows.slice(0, 25);
 
     await respond(interaction, {
         embeds: [
             new EmbedBuilder()
                 .setColor(0xed4245)
                 .setTitle(`Remove ${category}${group ? ` — ${CLASSES[group].label}` : ''}`)
-                .setDescription('Pick one to delete its role and remove it from the panel.'),
+                .setDescription(
+                    `Pick one or more to delete their roles and remove them from the panel.` +
+                        (rows.length > options.length ? `\n_Showing the first ${options.length} of ${rows.length}._` : ''),
+                ),
         ],
         components: [
             new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder()
                     .setCustomId(`setup:removepick:${category}`)
-                    .setPlaceholder(`Choose a ${category} to remove`)
-                    .addOptions(rows.map((row) => ({ label: row.label, value: row.role_id }))),
+                    .setPlaceholder(`Choose ${category}(s) to remove`)
+                    .setMinValues(1)
+                    .setMaxValues(options.length)
+                    .addOptions(options.map((row) => ({ label: row.label, value: row.role_id }))),
             ),
             new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('setup:roles').setLabel('Back').setStyle(ButtonStyle.Secondary),
@@ -702,9 +708,13 @@ async function renderAgentClassPicker(interaction) {
 }
 
 async function handleRemovePick(interaction, category) {
-    const [roleId] = interaction.values;
-    const removed = await selfRoles.removeRole(interaction.guildId, roleId);
-    if (removed) await interaction.guild.roles.delete(roleId, `Removed by ${interaction.user.tag}`).catch(() => {});
+    await interaction.deferUpdate();
+
+    for (const roleId of interaction.values) {
+        const removed = await selfRoles.removeRole(interaction.guildId, roleId);
+        if (removed) await interaction.guild.roles.delete(roleId, `Removed by ${interaction.user.tag}`).catch(() => {});
+    }
+
     await renderRoles(interaction);
 }
 

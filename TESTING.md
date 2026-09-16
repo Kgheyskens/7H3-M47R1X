@@ -18,6 +18,20 @@ npm run doctor        # tells you what is still missing
 
 If these pass, the logic is sound. Everything below tests the integration.
 
+> `npm run smoke` runs on pg-mem, an in-memory Postgres stand-in that does not implement
+> every real Postgres behaviour — notably, it cannot correctly re-validate a `CREATE TABLE
+> IF NOT EXISTS` against a *pre-existing* table with a different column set (it throws an
+> "AST not supported" error where real Postgres just no-ops). That specific scenario —
+> `guild_config` already existing from an earlier version of this bot — is exactly what the
+> `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` block in `utils/db.js` exists to handle, and is
+> the reason `/setup` can silently 500 on every action after a schema change: reusing the
+> **same** `DATABASE_URL` across bot versions means `guild_config` already exists with an
+> older column set, and `CREATE TABLE IF NOT EXISTS` never adds columns to a table that's
+> already there. Every column this bot reads or writes must have a matching `ALTER TABLE`
+> line — that list is validated for SQL syntax by `validate-sql` and exercised against a
+> fresh table by `smoke`, but the "already exists with fewer columns" path can only really be
+> proven against a real Postgres instance sharing that history, i.e. Stage 1 below.
+
 ---
 
 ## Stage 1 — Database (15 minutes, free)
@@ -99,7 +113,7 @@ Run `/setup` in your server.
 | 1 | Menu → **Welcome message** → enable, pick a channel, edit the message | Overview shows ✅ |
 | 2 | Menu → **Goodbye message** → same | Overview shows ✅ |
 | 3 | Menu → **Rules** → set a channel, write the text, enable the accept button, pick the role it grants, **Post rules message** | The message appears in the channel with an **I agree** button |
-| 4 | Menu → **Ranks & agents** → **Create default ranks**, then **Create default agents** | Check **Server Settings → Roles** — 9 rank roles and the full *current* agent roster (fetched live) now exist |
+| 4 | Menu → **Ranks & agents** → **Create default ranks**, then **Create default agents** | Check **Server Settings → Roles** — 25 rank roles (Iron 1 → Radiant, 3 divisions per tier except Radiant) and the full *current* agent roster (fetched live) now exist |
 | 5 | Pick a roles panel channel → **Post role panel** | A message with a rank select menu and one select menu per agent class appears |
 | 6 | **Finish setup** | Green "Setup complete" panel |
 
@@ -140,7 +154,8 @@ Ranks and agents don't have to be the defaults forever:
 
 1. `/setup` → **Ranks & agents** → **Add rank** → type a name → a new role is created and
    added to the panel.
-2. **Remove rank** → pick one from the list → its role is deleted from Discord too.
+2. **Remove rank** → the picker is multi-select — pick several at once (e.g. every old
+   pre-division rank name like plain "Gold") and they're all deleted from Discord in one go.
 3. Same for **Add agent** / **Remove agent**, with a class picker in between since a
    `/setup` server can have more agents than fit in one dropdown.
 4. Re-post the role panel to pick up the change — editing in place reuses the same message,

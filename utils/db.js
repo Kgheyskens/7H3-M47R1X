@@ -50,6 +50,35 @@ CREATE TABLE IF NOT EXISTS self_roles (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS self_roles_role_once ON self_roles (guild_id, role_id);
 CREATE INDEX IF NOT EXISTS self_roles_lookup ON self_roles (guild_id, category, sort_order);
+
+-- CREATE TABLE IF NOT EXISTS never adds a column to a table that already exists. guild_config
+-- has existed since the very first (Fortnite) version of this bot and has been through several
+-- shapes since — every column this bot currently reads or writes must be listed here, or a
+-- guild whose table predates that column throws "column does not exist" on every action that
+-- touches it. Each statement is idempotent; keep this list in sync with the CREATE TABLE above
+-- rather than assuming a fresh database is the only one this ever runs against.
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS setup_completed BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS setup_step TEXT;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS welcome_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS welcome_channel_id TEXT;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS welcome_message TEXT;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS goodbye_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS goodbye_channel_id TEXT;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS goodbye_message TEXT;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS rules_channel_id TEXT;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS rules_message TEXT;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS rules_message_id TEXT;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS rules_accept_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS rules_accept_role_id TEXT;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS roles_panel_channel_id TEXT;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS roles_panel_message_id TEXT;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS news_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS news_channel_id TEXT;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS news_feed_url TEXT;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS news_mention_role_id TEXT;
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS news_seen_ids TEXT[] NOT NULL DEFAULT '{}';
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE guild_config ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 `;
 
 let schemaPromise;

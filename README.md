@@ -15,7 +15,8 @@ an optional news feed.
    `{user}`, `{username}`, `{server}` and `{membercount}` get filled in automatically.
 3. **Rules** — write the rules text and post it. Optionally require members to press
    **I agree** before they get a role — a simple gate for the rest of the server.
-4. **Ranks & agents** — create the standard rank ladder (Iron → Radiant) and the full agent
+4. **Ranks & agents** — create the standard rank ladder (Iron 1 → Radiant, 3 divisions per
+   tier except Radiant — 25 roles, exactly Discord's per-menu limit) and the full agent
    roster with one click each, grouped by class (Duelist, Controller, Initiator, Sentinel).
    Add or remove individual ranks any time — useful whenever Riot changes the tier list.
    Post the panel and members pick their own rank and every agent they main from select
