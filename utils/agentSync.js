@@ -55,6 +55,9 @@ async function syncAgents(guild) {
     }
 }
 
+// The agent roles above are already created by the time this runs, so a failure here (most
+// often a channel permission overwrite) must not make the sync as a whole look like it
+// failed — it only means the posted panel didn't get the memo, not that nothing happened.
 async function announceNewAgents(guild, added) {
     const config = await getConfig(guild.id);
     if (!config.roles_panel_channel_id) return;
@@ -62,11 +65,14 @@ async function announceNewAgents(guild, added) {
     const channel = await guild.channels.fetch(config.roles_panel_channel_id).catch(() => null);
     if (!channel?.isTextBased()) return;
 
-    await rolePanel.postPanels(guild, channel);
-
-    await channel
-        .send(`🆕 New agent${added.length > 1 ? 's' : ''} added to the roster: **${added.join(', ')}** — pick ${added.length > 1 ? 'them' : 'it'} up above!`)
-        .catch(() => {});
+    try {
+        await rolePanel.postPanels(guild, channel);
+        await channel.send(
+            `🆕 New agent${added.length > 1 ? 's' : ''} added to the roster: **${added.join(', ')}** — pick ${added.length > 1 ? 'them' : 'it'} up above!`,
+        );
+    } catch (error) {
+        console.error(`Could not update the role panel after syncing agents in guild ${guild.id}:`, error.message);
+    }
 }
 
 async function syncAllGuilds(client) {

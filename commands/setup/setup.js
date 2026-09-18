@@ -365,15 +365,37 @@ async function postRules(interaction) {
     const channel = await interaction.guild.channels.fetch(config.rules_channel_id).catch(() => null);
     if (!channel?.isTextBased()) {
         await renderRules(interaction);
+        await interaction.followUp({
+            content: `I can't see <#${config.rules_channel_id}>. Pick the channel again — it may have been deleted, or I may have lost access to it.`,
+            ephemeral: true,
+        });
         return;
     }
 
     const payload = rulesPayload(config);
-    const existing = config.rules_message_id ? await channel.messages.fetch(config.rules_message_id).catch(() => null) : null;
-    const message = existing ? await existing.edit(payload) : await channel.send(payload);
 
-    await updateConfig(interaction.guildId, { rules_message_id: message.id });
-    await renderRules(interaction);
+    // send()/edit() are Discord API calls, not just local validation — a channel-specific
+    // permission overwrite (View Channel / Send Messages / Embed Links denied just in this
+    // channel, even though the bot's role has them server-wide) throws here, and without this
+    // try/catch that error was invisible: it fell through to app.js's generic "something went
+    // wrong" instead of naming the actual problem.
+    try {
+        const existing = config.rules_message_id ? await channel.messages.fetch(config.rules_message_id).catch(() => null) : null;
+        const message = existing ? await existing.edit(payload) : await channel.send(payload);
+        await updateConfig(interaction.guildId, { rules_message_id: message.id });
+        await renderRules(interaction);
+    } catch (error) {
+        console.error(`Could not post the rules message in guild ${interaction.guildId}:`, error.message);
+        await renderRules(interaction);
+        await interaction.followUp({
+            content:
+                `Discord refused to post in ${channel}: **${error.message}**. Check that I have ` +
+                `**View Channel**, **Send Messages**, and **Embed Links** permission specifically in that ` +
+                `channel — a channel-level permission overwrite can block me even if my role has them ` +
+                `server-wide.`,
+            ephemeral: true,
+        });
+    }
 }
 
 // --- News --------------------------------------------------------------------
@@ -600,11 +622,28 @@ async function postRolesPanel(interaction) {
     const channel = await interaction.guild.channels.fetch(config.roles_panel_channel_id).catch(() => null);
     if (!channel?.isTextBased()) {
         await renderRoles(interaction);
+        await interaction.followUp({
+            content: `I can't see <#${config.roles_panel_channel_id}>. Pick the channel again — it may have been deleted, or I may have lost access to it.`,
+            ephemeral: true,
+        });
         return;
     }
 
-    await rolePanel.postPanels(interaction.guild, channel);
-    await renderRoles(interaction);
+    try {
+        await rolePanel.postPanels(interaction.guild, channel);
+        await renderRoles(interaction);
+    } catch (error) {
+        console.error(`Could not post the role panel in guild ${interaction.guildId}:`, error.message);
+        await renderRoles(interaction);
+        await interaction.followUp({
+            content:
+                `Discord refused to post in ${channel}: **${error.message}**. Check that I have ` +
+                `**View Channel**, **Send Messages**, and **Embed Links** permission specifically in that ` +
+                `channel — a channel-level permission overwrite can block me even if my role has them ` +
+                `server-wide.`,
+            ephemeral: true,
+        });
+    }
 }
 
 function showNewsUrlModal(interaction, current) {
